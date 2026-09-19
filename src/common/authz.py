@@ -190,7 +190,9 @@ def _policy_files() -> tuple[dict, str]:
     if bucket:
         return _policy_files_s3(bucket)
     base = cedar_dir()
-    files = {name: (base / "policies" / f"{name}.cedar").read_text(encoding="utf-8") for name in POLICY_NAMES}
+    # Every policy in the store, not a fixed list: a policy approved from a proposal (#21) is a
+    # new file next to the four canonical ones and must be enforced without a code change.
+    files = {path.stem: path.read_text(encoding="utf-8") for path in sorted((base / "policies").glob("*.cedar"))}
     files["schema"] = (base / "schema.json").read_text(encoding="utf-8")
     # Same role as the S3 ETag version: identifies the policy set in force and changes the
     # moment any policy text changes. A content hash, not a path, so it is stable and
@@ -212,9 +214,10 @@ def _policy_files_s3(bucket: str) -> tuple[dict, str]:
     version = "s3:" + ",".join(f"{k}={v.strip(chr(34))[:8]}" for k, v in sorted(etags.items()))
     if _S3.get("version") != version:
         files = {}
-        for name in POLICY_NAMES:
-            obj = s3.get_object(Bucket=bucket, Key=f"cedar/policies/{name}.cedar")
-            files[name] = obj["Body"].read().decode("utf-8")
+        for key in sorted(etags):
+            if key.startswith("cedar/policies/") and key.endswith(".cedar"):
+                name = key[len("cedar/policies/"):-len(".cedar")]
+                files[name] = s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("utf-8")
         files["schema"] = s3.get_object(Bucket=bucket, Key="cedar/schema.json")["Body"].read().decode("utf-8")
         _S3.update(version=version, files=files)
     return _S3["files"], _S3["version"]
@@ -228,12 +231,18 @@ def policy_version() -> str:
         return f"unknown: {exc}"
 
 
+def policy_names(files: dict) -> list[str]:
+    """The canonical four first, then any others in the store, alphabetically."""
+    extra = sorted(n for n in files if n != "schema" and n not in POLICY_NAMES)
+    return [n for n in POLICY_NAMES if n in files] + extra
+
+
 def _load_local() -> dict:
     """Cedarpy inputs (policies with an @id each so diagnostics name them, and the schema),
     rebuilt whenever the policy set version changes."""
     files, version = _policy_files()
     if _LOCAL.get("version") != version:
-        parts = [f'@id("{name}")\n{files[name]}' for name in POLICY_NAMES]
+        parts = [f'@id("{name}")\n{files[name]}' for name in policy_names(files)]
         _LOCAL.update(version=version, policies="\n".join(parts), schema=json.loads(files["schema"]))
     return _LOCAL
 
@@ -285,7 +294,7 @@ def list_policies_with_version() -> tuple[list[dict], str]:
         return list(data.get("items") or []), str(data.get("policy_version", "unknown"))
     if os.environ.get("LEASH_LOCAL_AUTHZ") == "1":
         files, version = _policy_files()
-        return [_policy_row(name, files[name], "") for name in POLICY_NAMES], version
+        return [_policy_row(name, files[name], "") for name in policy_names(files)], version
     return _list_policies_avp(), "avp"
 
 

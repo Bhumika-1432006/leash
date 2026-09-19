@@ -37,9 +37,31 @@ def setup(reset_world: bool = True):
 
     if reset_world:
         fake_aws.reset()
+        _use_scratch_policy_store()
     fake_aws.install()
     local_lambda.install()
     return fake_aws.WORLD
+
+
+def _use_scratch_policy_store():
+    """Point the authorizer at a throwaway copy of cedar/ so approving a proposed policy (#21)
+    is real - enforced on the next decision - without ever touching the repo's own files."""
+    import shutil
+    import tempfile
+
+    current = os.environ.get("LEASH_CEDAR_DIR")
+    if current and current not in _SCRATCH_DIRS:
+        return  # the operator pointed at a store of their own; respect it
+    scratch = Path(tempfile.mkdtemp(prefix="leash-cedar-")) / "cedar"
+    shutil.copytree(REPO_ROOT / "cedar", scratch)
+    os.environ["LEASH_CEDAR_DIR"] = str(scratch)
+    _SCRATCH_DIRS.add(str(scratch))  # a later reset replaces it, so approvals never leak across runs
+    from common import authz
+
+    authz._LOCAL.clear()
+
+
+_SCRATCH_DIRS: set = set()
 
 
 def ollama_ready(model_id: str | None = None, timeout: float = 2.0) -> tuple[bool, str]:

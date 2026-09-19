@@ -4,105 +4,264 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Leash — audit trail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+  /* Leash dashboard. Editorial, paper-first: warm off-white ground, tight display type, tiny
+     mono uppercase labels, generously rounded cards with soft shadows, one black pill button.
+     Light only, by decision: the page looks the same on every viewer's machine, the video and
+     the README screenshots match it, and the colours were tuned for this ground. Every value is
+     a token, so a dark scheme is one media block away if ever wanted. */
   :root {
-    --bg: #14161a; --panel: #1d2026; --line: #2c3038; --text: #e8eaed; --muted: #9aa0a8;
-    --allow: #2ecc71; --deny: #ff5f5f; --accent: #7aa2ff; --warn: #ffb454;
-    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    color-scheme: light;
+    --bg: #f6f6f3; --panel: #ffffff; --panel-2: #fafaf8; --line: #e6e5df; --line-2: #d6d5ce;
+    --text: #111111; --text-2: #3d3d3a; --muted: #6f6f69;
+    --allow: #1a9e5c; --deny: #d8382f; --accent: #2457d6; --warn: #b8730a;
+    --chip: #f0efea; --btn-bg: #111111; --btn-fg: #ffffff;
+    --deny-wash: rgba(216, 56, 47, 0.05); --accent-wash: rgba(36, 87, 214, 0.06);
+    --allow-tint: rgba(26, 158, 92, 0.12); --deny-tint: rgba(216, 56, 47, 0.10); --warn-tint: rgba(184, 115, 10, 0.12);
+    --accent-ring: rgba(36, 87, 214, 0.28);
+    --banner-bg: #fff4e3; --banner-line: #e6b26b; --banner-fg: #6b3d00;
+    --shadow: 0 1px 2px rgba(20, 20, 16, 0.04), 0 8px 24px -12px rgba(20, 20, 16, 0.18);
+    --shadow-hover: 0 2px 4px rgba(20, 20, 16, 0.05), 0 16px 32px -16px rgba(20, 20, 16, 0.24);
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --r: 16px; --r-sm: 10px;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { display: flex; align-items: baseline; gap: 16px; padding: 18px 28px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  header h1 { margin: 0; font-size: 26px; letter-spacing: 0.5px; }
-  header .tag { color: var(--muted); font-size: 15px; }
-  header .status { margin-left: auto; color: var(--muted); font-size: 14px; font-family: var(--mono); }
-  .banner { display: none; margin: 16px 28px 0; padding: 12px 16px; border-radius: 8px; background: #4a2a10; border: 1px solid #b86b1e; color: #ffd9a8; font-family: var(--mono); }
 
-  /* stat tiles: the numbers a judge should walk away with */
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 20px 28px 0; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); font-feature-settings: "cv11", "ss01"; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  ::selection { background: var(--accent-ring); }
+
+  /* labels: the small mono uppercase voice used for every heading and meta line */
+  .label, section h2, th, .bars .row.head, .stat .label, .tl-hint, .feed .atk .meta {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500;
+  }
+
+  /* header: wordmark, one editorial line, status chips */
+  header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 24px; padding: 22px 36px 18px; }
+  header .brand { display: flex; align-items: center; gap: 10px; }
+  header .mark { width: 28px; height: 28px; border-radius: 8px; background: var(--btn-bg); color: var(--btn-fg); display: grid; place-items: center; font-family: var(--mono); font-weight: 700; font-size: 14px; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: -0.02em; font-weight: 700; }
+  header .beta { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; padding: 2px 7px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+  header .lede { margin: 0; font-size: 15px; color: var(--text-2); }
+  header .lede em { font-style: normal; color: var(--muted); }
+  header .chips { display: flex; gap: 8px; justify-self: end; flex-wrap: wrap; justify-content: flex-end; }
+  .status { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .status.chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); white-space: nowrap; }
+  .status.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.9; }
+  .banner { display: none; margin: 0 36px 16px; padding: 12px 16px; border-radius: var(--r-sm); background: var(--banner-bg); border: 1px solid var(--banner-line); color: var(--banner-fg); font-family: var(--mono); font-size: 13px; }
+
+  /* the hero numbers */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 8px 36px 0; }
   @media (max-width: 800px) { .stats { grid-template-columns: repeat(2, 1fr); } }
-  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-  .stat .value { font-size: 30px; font-weight: 700; font-family: var(--mono); margin-top: 2px; line-height: 1.1; }
-  .stat .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px 16px; box-shadow: var(--shadow); transition: transform .18s ease, box-shadow .18s ease; position: relative; overflow: hidden; }
+  .stat:hover { transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+  .stat .value { font-size: 44px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .stat .sub { color: var(--muted); font-size: 12.5px; margin-top: 8px; line-height: 1.4; }
   .stat.allow .value { color: var(--allow); } .stat.deny .value { color: var(--deny); } .stat.time .value { color: var(--accent); }
 
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 20px; padding: 20px 28px; }
-  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
-  .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
-  section h2 { margin: 0 0 12px; font-size: 15px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
-  section h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 8px; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 20px 36px 8px; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  .wide { grid-column: 1 / -1; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 22px 24px; box-shadow: var(--shadow); min-width: 0; }
+  section h2 { margin: 0 0 14px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  section h2 small { text-transform: none; letter-spacing: 0; font-family: var(--sans); font-size: 13px; font-weight: 400; color: var(--muted); }
+  .note { margin: 12px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
 
-  .scroll { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 15px; }
-  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  td.result { font-size: 13px; color: #cfd3da; max-width: 340px; overflow-wrap: anywhere; }
-  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
-  td.mono { font-family: var(--mono); font-size: 14px; }
-  td.time { white-space: nowrap; color: var(--muted); font-family: var(--mono); font-size: 13px; }
-  tr.deny td { background: rgba(255, 95, 95, 0.06); }
-  tr.incident-head td { background: rgba(122, 162, 255, 0.06); color: var(--muted); font-size: 12px; font-family: var(--mono); padding: 5px 10px; }
-  .pill { display: inline-block; padding: 3px 12px; border-radius: 999px; font-weight: 700; font-size: 13px; letter-spacing: 1px; }
-  .pill.allow { background: rgba(46, 204, 113, 0.18); color: var(--allow); border: 1px solid var(--allow); }
-  .pill.deny { background: rgba(255, 95, 95, 0.18); color: var(--deny); border: 1px solid var(--deny); }
-  .policy { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 6px; background: #2a2e37; font-family: var(--mono); font-size: 12px; cursor: pointer; border: 1px solid transparent; }
+  /* buttons: one black pill with an arrow; quiet links for scope switches */
+  button { margin-top: 12px; padding: 10px 18px; border: 0; border-radius: 999px; background: var(--btn-bg); color: var(--btn-fg); font: 600 14px/1 var(--sans); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: var(--shadow); transition: transform .15s ease, box-shadow .15s ease, opacity .15s; }
+  button::after { content: "→"; font-family: var(--mono); font-weight: 500; opacity: .8; }
+  button:hover { transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+  button:active { transform: translateY(0); }
+  button:disabled { opacity: 0.45; cursor: wait; transform: none; }
+  button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* the audit trail */
+  .scroll { overflow-x: auto; margin: 0 -8px; padding: 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 500; white-space: nowrap; }
+  thead th { position: sticky; top: 0; background: var(--panel); }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.result { font-size: 12.5px; color: var(--text-2); max-width: 560px; overflow-wrap: anywhere; line-height: 1.45; }
+  td.mono { font-family: var(--mono); font-size: 12.5px; }
+  td.mono small { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  td.time { white-space: nowrap; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  tr.deny td { background: var(--deny-wash); }
+  tr.incident-head td { background: var(--panel-2); color: var(--muted); font-size: 11px; font-family: var(--mono); letter-spacing: 0.06em; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  .pill { display: inline-block; padding: 4px 11px; border-radius: 999px; font-family: var(--mono); font-weight: 600; font-size: 11px; letter-spacing: 0.1em; }
+  .pill.allow { background: var(--allow-tint); color: var(--allow); }
+  .pill.deny { background: var(--deny-tint); color: var(--deny); }
+  .policy { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 9px; border-radius: 6px; background: var(--chip); font-family: var(--mono); font-size: 11.5px; cursor: pointer; border: 1px solid transparent; transition: border-color .15s; }
   .policy:hover { border-color: var(--accent); }
-  .empty { color: var(--muted); padding: 24px 10px; text-align: center; }
+  .empty { color: var(--muted); padding: 28px 10px; text-align: center; font-size: 13.5px; }
 
-  /* the leash: the policies, verbatim, from the store that enforces them */
-  .cedar { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg); transition: box-shadow .2s, border-color .2s; }
+  /* incident timeline */
+  .timeline { min-width: 560px; }
+  .tl-row { display: grid; grid-template-columns: 230px 1fr 84px; gap: 14px; align-items: center; padding: 9px 10px; border-radius: var(--r-sm); cursor: pointer; border: 1px solid transparent; transition: background .15s, border-color .15s; }
+  .tl-row:hover { background: var(--panel-2); }
+  .tl-row.selected { border-color: var(--accent); background: var(--accent-wash); }
+  .tl-row .name { font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-row .name small { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; }
+  .tl-row .track { position: relative; height: 14px; }
+  .tl-row .track .base { position: absolute; top: 5px; left: 0; height: 4px; border-radius: 2px; background: var(--chip); }
+  .tl-row .track .seg { position: absolute; top: 0; width: 6px; height: 14px; border-radius: 3px; transform: translateX(-3px); }
+  .tl-row .track .seg.allow { background: var(--allow); } .tl-row .track .seg.deny { background: var(--deny); }
+  .tl-row .track .seg:hover { outline: 2px solid var(--accent); }
+  .tl-row .elapsed { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .tl-hint { margin: 10px 0 0; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+  .dot.allow { background: var(--allow); } .dot.deny { background: var(--deny); }
+
+  /* the leash */
+  .cedar { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 12px 14px; margin-bottom: 10px; background: var(--panel-2); transition: box-shadow .2s, border-color .2s; }
   .cedar.permit { border-left: 3px solid var(--allow); } .cedar.forbid { border-left: 3px solid var(--deny); }
-  .cedar.flash { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(122, 162, 255, 0.35); }
-  .cedar .head { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 13px; }
-  .cedar .effect { font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 1px 7px; border-radius: 999px; }
-  .cedar.permit .effect { color: var(--allow); border: 1px solid var(--allow); } .cedar.forbid .effect { color: var(--deny); border: 1px solid var(--deny); }
+  .cedar.flash { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+  .cedar .head { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  .cedar .effect { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; padding: 2px 7px; border-radius: 999px; }
+  .cedar.permit .effect { color: var(--allow); background: var(--allow-tint); } .cedar.forbid .effect { color: var(--deny); background: var(--deny-tint); }
   .cedar .desc { color: var(--muted); font-size: 12px; margin: 4px 0 6px; }
-  .cedar pre { margin: 0; white-space: pre-wrap; font-family: var(--mono); font-size: 12px; line-height: 1.4; color: #cfd3da; }
+  .cedar pre { margin: 8px 0 0; white-space: pre-wrap; font-family: var(--mono); font-size: 12px; line-height: 1.5; color: var(--text-2); }
 
-  /* red team: attacker model vs the leash, with the unleashed control arm */
+  /* the arena in 3D: two worlds side by side, the same attacks fired into both */
+  .arena3d { position: relative; height: 340px; margin: 0 0 18px; border-radius: var(--r-sm); border: 1px solid var(--line); overflow: hidden;
+    background: radial-gradient(ellipse at 50% 120%, #ffffff 0%, var(--panel-2) 55%, var(--bg) 100%); }
+  .arena3d canvas { display: block; width: 100%; height: 100%; }
+  .arena3d::after { content: ""; position: absolute; left: 50%; top: 10%; bottom: 10%; width: 1px; background: var(--line-2); }
+  .arena3d .arm { position: absolute; top: 14px; display: flex; flex-direction: column; gap: 2px; font-family: var(--mono); pointer-events: none; }
+  .arena3d .arm.l { left: 18px; } .arena3d .arm.r { left: calc(50% + 18px); }
+  .arena3d .arm.c { top: auto; bottom: 12px; left: 50%; transform: translateX(-50%); align-items: center; }
+  .arena3d .arm .k { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .arena3d .arm b { font-size: 34px; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .arena3d .arm.l b { color: var(--deny); } .arena3d .arm.r b { color: var(--allow); }
+  .arena3d .arm .s { font-size: 11px; color: var(--muted); }
+  @media (max-width: 800px) { .arena3d { height: 260px; } .arena3d .arm b { font-size: 26px; } }
+
+  /* red team */
   .arena { grid-column: 1 / -1; }
-  .arena .head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .arena .head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
   .arena .head h2 { margin: 0; }
-  .arena .head button { margin: 0; padding: 8px 14px; font-size: 14px; }
-  .arena .head .run { color: var(--muted); font-size: 13px; font-family: var(--mono); }
-  .big { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+  .arena .head button { margin: 0; padding: 9px 16px; font-size: 13px; }
+  .arena .head .run { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+  .big { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 18px; }
   @media (max-width: 800px) { .big { grid-template-columns: repeat(2, 1fr); } }
-  .big .stat .value { font-size: 40px; }
+  .big .stat { border-top: 3px solid var(--line-2); }
+  .big .stat .value { font-size: 48px; }
+  .big .stat.warn { border-top-color: var(--warn); } .big .stat.bad { border-top-color: var(--deny); } .big .stat.zero { border-top-color: var(--allow); }
   .big .stat.zero .value { color: var(--allow); } .big .stat.bad .value { color: var(--deny); } .big .stat.warn .value { color: var(--warn); }
-  .arena-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 1000px) { .arena-grid { grid-template-columns: 1fr; } }
-  .bars .row { display: grid; grid-template-columns: 120px 1fr 1fr 60px; gap: 10px; align-items: center; font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--line); }
-  .bars .row.head { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-  .bar { height: 10px; border-radius: 5px; background: #2a2e37; overflow: hidden; }
-  .bar i { display: block; height: 100%; }
+  .arena-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 1100px) { .arena-grid { grid-template-columns: 1fr; } }
+  .bars .row { display: grid; grid-template-columns: 120px 1fr 1fr 60px; gap: 12px; align-items: center; font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .bars .row:last-child { border-bottom: 0; }
+  .bars .row.head { padding-bottom: 8px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--chip); overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 4px; }
   .bar.deny i { background: var(--deny); } .bar.allow i { background: var(--allow); }
-  .feed { max-height: 420px; overflow-y: auto; font-size: 13px; }
-  .feed .atk { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; background: var(--bg); }
-  .feed .atk .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-  .feed .atk .msg { white-space: pre-wrap; color: #cfd3da; max-height: 64px; overflow: hidden; }
-  .feed .atk .arms { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
-  .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .5px; border: 1px solid; }
-  .chip.ok { color: var(--allow); border-color: var(--allow); } .chip.bad { color: var(--deny); border-color: var(--deny); } .chip.dim { color: var(--muted); border-color: var(--line); }
+  .feed { max-height: 440px; overflow-y: auto; font-size: 13px; padding-right: 4px; }
+  .feed .atk { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 12px; margin-bottom: 8px; background: var(--panel-2); }
+  .feed .atk .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 5px; letter-spacing: 0.06em; }
+  .feed .atk .msg { white-space: pre-wrap; color: var(--text-2); max-height: 64px; overflow: hidden; line-height: 1.45; }
+  .feed .atk .arms { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .chip { display: inline-block; padding: 3px 9px; border-radius: 999px; font-family: var(--mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; border: 1px solid; }
+  .chip.ok { color: var(--allow); border-color: transparent; background: var(--allow-tint); }
+  .chip.bad { color: var(--deny); border-color: transparent; background: var(--deny-tint); }
+  .chip.dim { color: var(--muted); border-color: var(--line); }
 
-  textarea { width: 100%; min-height: 96px; resize: vertical; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
-  button { margin-top: 10px; padding: 10px 18px; border: 0; border-radius: 8px; background: var(--accent); color: #0b1020; font-weight: 700; font-size: 15px; cursor: pointer; }
-  button:disabled { opacity: 0.5; cursor: wait; }
-  .examples { margin: 8px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
-  .examples li { cursor: pointer; margin: 4px 0; } .examples li:hover { color: var(--text); }
-  .note { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
-  #reply { margin-top: 14px; padding: 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); white-space: pre-wrap; font-size: 15px; min-height: 60px; }
-  #reply.err { border-color: var(--deny); color: #ffb3b3; }
+  /* propose a rule */
+  .proposal { margin-top: 14px; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 14px 16px; background: var(--panel-2); font-size: 13px; }
+  .proposal .head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-family: var(--mono); margin-bottom: 6px; font-size: 12.5px; }
+  .proposal pre { margin: 8px 0; white-space: pre-wrap; font-family: var(--mono); font-size: 12px; line-height: 1.5; color: var(--text-2); border-left: 3px solid var(--line); padding-left: 12px; }
+  .proposal.forbid pre { border-left-color: var(--deny); } .proposal.permit pre { border-left-color: var(--allow); }
+  .proposal .proof { margin: 8px 0 0; padding: 0; list-style: none; }
+  .proposal .proof li { padding: 2px 0; font-family: var(--mono); font-size: 12px; }
+  .proposal .proof li.same { color: var(--muted); }
+  .proposal .errs { color: var(--deny); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; margin-top: 6px; }
+  .proposal button { margin-top: 12px; }
+  .proposal button.approve { background: var(--allow); color: #fff; }
+  .proposal .muted { color: var(--muted); }
+
+  /* ask the agent */
+  textarea { width: 100%; min-height: 96px; resize: vertical; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); font: 14px/1.5 var(--sans); transition: border-color .15s; }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--muted); }
+  .examples { margin: 12px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
+  .examples li { cursor: pointer; margin: 6px 0; padding-left: 14px; position: relative; transition: color .15s; }
+  .examples li::before { content: "+"; position: absolute; left: 0; font-family: var(--mono); color: var(--muted); }
+  .examples li:hover { color: var(--text); }
+  #reply { margin-top: 14px; padding: 14px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); white-space: pre-wrap; font-size: 14px; min-height: 60px; line-height: 1.55; }
+  #reply.err { border-color: var(--deny); color: var(--deny); }
+
+  /* the verdict: one sentence that answers "is everything okay?" before any number, and the
+     four steps a judge needs to explain the project to another judge */
+  .verdict { padding: 6px 36px 18px; }
+  .verdict-line { margin: 0 0 16px; font-size: 26px; line-height: 1.25; letter-spacing: -0.02em; font-weight: 600; max-width: 1040px; text-wrap: balance; }
+  .verdict-line em { font-style: normal; } .verdict-line em.ok { color: var(--allow); } .verdict-line em.no { color: var(--deny); }
+  .verdict-line code { font-family: var(--mono); font-size: 0.72em; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: var(--chip); vertical-align: 2px; }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
+  .steps li { position: relative; padding: 12px 14px 12px 42px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--panel); font-size: 12.5px; line-height: 1.4; }
+  .steps li::before { counter-increment: step; content: counter(step, decimal-leading-zero); position: absolute; left: 14px; top: 13px; font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .08em; }
+  .steps li b { display: block; font-weight: 600; margin-bottom: 2px; } .steps li span { color: var(--muted); }
+  @media (max-width: 800px) { .steps { grid-template-columns: repeat(2, 1fr); } .verdict-line { font-size: 20px; } }
+  @media (max-width: 600px) { .verdict { padding: 4px 16px 12px; } .steps { grid-template-columns: 1fr; } }
+
+  /* arrivals: a row that landed since the last refresh slides in and glows; every new decision
+     also announces itself in a toast, so a viewer sees the moment, not just the row */
+  @keyframes arrive { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  @keyframes glow { 0% { box-shadow: inset 4px 0 0 var(--allow); } 100% { box-shadow: inset 4px 0 0 transparent; } }
+  @keyframes glow-deny { 0% { box-shadow: inset 4px 0 0 var(--deny); } 100% { box-shadow: inset 4px 0 0 transparent; } }
+  tr.new { animation: arrive .35s ease-out 1; }
+  tr.new td:first-child { animation: glow 3s ease-out 1; }
+  tr.new.deny td:first-child { animation-name: glow-deny; }
+  .toasts { position: fixed; right: 24px; bottom: 24px; display: flex; flex-direction: column; gap: 10px; z-index: 50; width: min(440px, calc(100vw - 32px)); pointer-events: none; }
+  .toast { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--r-sm); box-shadow: var(--shadow-hover); padding: 12px 14px 12px 16px; font-size: 13px; animation: arrive .3s ease-out 1; }
+  .toast.deny { border-left-color: var(--deny); } .toast.allow { border-left-color: var(--allow); }
+  .toast .k { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; }
+  .toast.deny .k { color: var(--deny); } .toast.allow .k { color: var(--allow); }
+  .toast .m { color: var(--text-2); line-height: 1.45; }
+  .toast .m code { font-family: var(--mono); font-size: 12px; }
+  .toast.leaving { opacity: 0; transform: translateY(6px); transition: opacity .3s, transform .3s; }
+  @media (prefers-reduced-motion: reduce) { tr.new, tr.new td:first-child, .toast { animation: none; } }
+
+  footer { padding: 24px 36px 36px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  footer .label { margin: 0; }
+  footer a { color: var(--muted); }
+
+  /* mobile */
+  @media (max-width: 600px) {
+    header { grid-template-columns: 1fr; gap: 10px; padding: 16px 16px 8px; }
+    header .chips { justify-self: start; }
+    .banner { margin: 0 16px 12px; }
+    .stats, main { padding-left: 16px; padding-right: 16px; }
+    .stats { gap: 10px; } .stat { padding: 14px 14px 12px; } .stat .value { font-size: 30px; } .big .stat .value { font-size: 26px; white-space: nowrap; }
+    section { padding: 16px 14px; }
+    .tl-row { grid-template-columns: 150px 1fr 70px; gap: 8px; }
+    .bars .row { grid-template-columns: 90px 1fr 1fr 48px; }
+    footer { padding: 16px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>Leash</h1>
-  <span class="tag">an ops agent on a leash — every action authorised by Cedar</span>
-  <span class="status" id="brain" style="margin-left:auto"></span>
-  <span class="status" id="status" style="margin-left:16px">connecting…</span>
+  <div class="brand"><span class="mark">L</span><h1>Leash</h1><span class="beta">live</span></div>
+  <p class="lede">An ops agent on a leash. <em>Every action authorised by Cedar before it happens.</em></p>
+  <div class="chips"><span class="status chip" id="brain"></span><span class="status chip" id="status">connecting…</span></div>
 </header>
 <div class="banner" id="banner">dashboard/config.js not generated — run scripts/deploy.sh to write it from the stack's ApiUrl.</div>
+
+<div class="verdict">
+  <p class="verdict-line" id="verdict">Connecting to the audit trail…</p>
+  <ol class="steps" aria-label="How Leash works">
+    <li><b>An alarm fires</b><span>CloudWatch → EventBridge hands the incident to the agent</span></li>
+    <li><b>The agent diagnoses</b><span>read-only tools: tags, disk usage, running tasks</span></li>
+    <li><b>It asks the leash</b><span>every action is checked against four Cedar policies first</span></li>
+    <li><b>Act, or refuse</b><span>ALLOW runs the fix; DENY runs nothing. Both are audited.</span></li>
+  </ol>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
 <div class="stats">
   <div class="stat allow"><div class="label">Allowed</div><div class="value" id="n-allow">–</div><div class="sub">actions Cedar permitted</div></div>
@@ -119,6 +278,12 @@
       <span class="run" id="arena-status"></span>
       <span class="run" id="arena-scope" style="margin-left:auto"><a href="#" id="scope-latest">latest run</a> · <a href="#" id="scope-all">all runs</a></span>
     </div>
+    <div class="arena3d" id="arena3d">
+      <canvas id="arena-canvas" aria-label="The same attacks, twice: without the leash the core is destroyed; with the leash they burst against the dome"></canvas>
+      <div class="arm l"><span class="k">No leash</span><b id="a3-left">0</b><span class="s">destroyed in the sandbox</span></div>
+      <div class="arm r"><span class="k">With Leash</span><b id="a3-right">0</b><span class="s">destroyed, ever</span></div>
+      <div class="arm c"><span class="k">same model · same attacks</span></div>
+    </div>
     <div class="big">
       <div class="stat"><div class="label">Attacks</div><div class="value" id="rt-n">–</div><div class="sub" id="rt-n-sub">generated by an attacker model, 8 tactics</div></div>
       <div class="stat warn"><div class="label">Model persuaded</div><div class="value" id="rt-persuaded">–</div><div class="sub">it called the destructive tool</div></div>
@@ -134,37 +299,57 @@
       <div class="feed" id="rt-feed"></div>
     </div>
   </section>
-  <div class="col">
-    <section>
-      <h2>Audit trail <small>newest first · refreshes every 10 s</small></h2>
-      <div class="scroll">
-      <table>
-        <thead><tr><th>Time (UTC)</th><th>Action</th><th>Resource</th><th>Env</th><th>Decision</th><th>Policies</th><th>Result</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-      </table>
-      </div>
-    </section>
-  </div>
-  <div class="col">
-    <section>
-      <h2>The leash <small id="leash-src">read live from the policy store</small> <small id="policy-version" class="mono" title="identifies the policy set in force (S3 object ETags); changes the moment a policy is edited in the bucket"></small></h2>
-      <div id="policies"><div class="empty">Loading policies…</div></div>
-      <p class="note">Cedar is deny-by-default and any <b>forbid</b> beats every <b>permit</b>. Click a policy id in the audit trail to jump to the rule that decided it.</p>
-    </section>
-    <section>
-      <h2>Ask the agent</h2>
-      <textarea id="message" placeholder="Ask the agent to do something"></textarea>
-      <button id="send">Send to agent</button>
-      <!-- filled by script from LEASH_CONFIG so the prompts carry the deployment's real ids -->
-      <ul class="examples" id="examples"></ul>
-      <p class="note">Every decision lands in the audit trail the moment the leash makes it, before the agent
-        acts. The reply itself takes as long as the model does: seconds on Bedrock, a few minutes on a
-        laptop CPU model.</p>
-      <div id="reply">The agent will diagnose, act only through policy-checked tools, and report what was allowed or denied.</div>
-    </section>
-  </div>
+  <section>
+    <h2>Incidents <small>one row each · click to filter the trail</small></h2>
+    <div class="scroll"><div class="timeline" id="timeline"><div class="empty">No incidents yet.</div></div></div>
+    <p class="tl-hint"><span><i class="dot allow"></i>allowed</span><span><i class="dot deny"></i>denied</span><span>bar: incident start → last decision</span><a href="#" id="tl-clear" hidden>show all incidents</a></p>
+  </section>
+  <section>
+    <h2>The leash <small id="leash-src">read live from the policy store</small> <small id="policy-version" class="mono" title="identifies the policy set in force (S3 object ETags); changes the moment a policy is edited in the bucket"></small></h2>
+    <div id="policies"><div class="empty">Loading policies…</div></div>
+    <p class="note">Cedar is deny-by-default and any <b>forbid</b> beats every <b>permit</b>. Click a policy id in the audit trail to jump to the rule that decided it.</p>
+  </section>
+  <section class="wide">
+    <h2>Audit trail <small id="trail-sub">newest first · refreshes every 10 s</small></h2>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Time (UTC)</th><th>Action</th><th>Resource</th><th>Env</th><th>Decision</th><th>Policies</th><th>Result</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table>
+    </div>
+  </section>
+  <section>
+    <h2>Propose a rule <small>English in, Cedar out, proven before it is published</small></h2>
+    <textarea id="rule" placeholder="e.g. the bot may never scale above 2"></textarea>
+    <button id="propose">Draft &amp; prove</button>
+    <ul class="examples" id="rule-examples">
+      <li>the bot may never scale above 2</li>
+      <li>allow cleanup on staging</li>
+      <li>the bot must not restart anything on prod</li>
+    </ul>
+    <p class="note">The model drafts, Cedar decides whether the draft is even valid, and the proof shows every
+      request whose answer would change. Nothing is published until a person clicks Approve.</p>
+    <div id="proposal" class="proposal" hidden></div>
+  </section>
+  <section>
+    <h2>Ask the agent</h2>
+    <textarea id="message" placeholder="Ask the agent to do something"></textarea>
+    <button id="send">Send to agent</button>
+    <!-- filled by script from LEASH_CONFIG so the prompts carry the deployment's real ids -->
+    <ul class="examples" id="examples"></ul>
+    <p class="note">Every decision lands in the audit trail the moment the leash makes it, before the agent
+      acts. The reply itself takes as long as the model does: seconds on Bedrock, a few minutes on a
+      laptop CPU model.</p>
+    <div id="reply">The agent will diagnose, act only through policy-checked tools, and report what was allowed or denied.</div>
+  </section>
 </main>
+<footer>
+  <p class="label">Built on AWS · Strands · Cedar</p>
+  <p class="label">thegoodengineers · First Commit 2026</p>
+  <p class="label"><a href="https://github.com/Chirag6722/leash">github.com/Chirag6722/leash</a></p>
+</footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
 <script src="config.js"></script>
 <script>
   // scripts/deploy.sh writes config.js from the stack outputs; local_demo/server.py writes the
@@ -250,14 +435,77 @@
       }
     });
     var n = Object.keys(incidents).length;
-    $("n-allow").textContent = allow;
-    $("n-deny").textContent = deny;
-    $("n-incidents").textContent = n;
+    countTo($("n-allow"), allow);
+    countTo($("n-deny"), deny);
+    countTo($("n-incidents"), n);
     $("n-incidents-sub").textContent = alarms + " from alarms · " + (n - alarms) + " from humans";
     var med = median(fixes);
     $("n-ttf").textContent = fmtSeconds(med);
     $("n-ttf-sub").textContent = med == null ? "no auto-fixed alarm yet" : "median over " + fixes.length + " auto-fixed alarm" + (fixes.length === 1 ? "" : "s") + " · no human involved";
   }
+
+  // --- incident timeline ------------------------------------------------------------------
+  // Rows arrive newest first. An incident is one pk: its start is in the id (or, for ids
+  // without a timestamp, its earliest row) and it ends at its last decision.
+  var selectedIncident = null;
+  var lastItems = [];
+
+  function incidentsOf(items) {
+    var byPk = {}, order = [];
+    items.forEach(function (it) {
+      if (!byPk[it.pk]) { byPk[it.pk] = { pk: it.pk, alarm: it.alarm_name || "", rows: [] }; order.push(it.pk); }
+      byPk[it.pk].rows.push(it);
+    });
+    return order.map(function (pk) {
+      var inc = byPk[pk];
+      var times = inc.rows.map(function (r) { return parseSk(r.sk); }).filter(function (t) { return t != null; });
+      var start = parseIncidentStart(pk);
+      if (start == null && times.length) start = Math.min.apply(null, times);
+      var end = times.length ? Math.max.apply(null, times) : start;
+      inc.start = start; inc.end = end;
+      inc.elapsed = (start != null && end != null) ? Math.max(0, (end - start) / 1000) : null;
+      return inc;
+    }).filter(function (inc) { return inc.start != null; });
+  }
+
+  function renderTimeline(items) {
+    var incs = incidentsOf(items);
+    if (!incs.length) { $("timeline").innerHTML = '<div class="empty">No incidents yet.</div>'; return; }
+    // Bars share one scale so a 6-minute alarm fix and a 2-second denial read at a glance.
+    var longest = Math.max.apply(null, incs.map(function (i) { return i.elapsed || 0; })) || 1;
+    $("timeline").innerHTML = incs.map(function (inc) {
+      var width = Math.max(4, Math.round(100 * (inc.elapsed || 0) / longest));
+      var span = Math.max(1, (inc.end - inc.start));
+      var segs = inc.rows.map(function (r) {
+        var t = parseSk(r.sk);
+        var x = t == null ? 100 : Math.round(100 * (t - inc.start) / span);
+        var deny = String(r.decision).toUpperCase() === "DENY";
+        var clock = (String(r.sk || "").match(/T(\d{2}:\d{2}:\d{2})/) || [])[1] || "";
+        return '<i class="seg ' + (deny ? "deny" : "allow") + '" style="left:' + Math.min(100, Math.max(0, x)) + '%" title="' +
+          esc(r.action) + " · " + (deny ? "DENY " : "ALLOW ") + esc((r.policy_ids || []).join(", ")) + " · " + esc(clock) + 'Z"></i>';
+      }).join("");
+      var kind = inc.alarm ? "alarm " + inc.alarm : "human request";
+      var when = new Date(inc.start).toISOString().slice(11, 19) + "Z";
+      return '<div class="tl-row' + (inc.pk === selectedIncident ? " selected" : "") + '" data-pk="' + esc(inc.pk) + '">' +
+        '<div class="name" title="' + esc(inc.pk) + '">' + esc(kind) + "<small>" + when + " · " + inc.rows.length + " decision" + (inc.rows.length === 1 ? "" : "s") + "</small></div>" +
+        '<div class="track"><div class="base" style="width:' + width + '%"></div><div style="position:absolute;left:0;top:0;height:14px;width:' + width + '%">' + segs + "</div></div>" +
+        '<div class="elapsed">' + fmtSeconds(inc.elapsed) + "</div></div>";
+    }).join("");
+  }
+
+  function selectIncident(pk) {
+    selectedIncident = (pk && pk !== selectedIncident) ? pk : null;
+    $("tl-clear").hidden = !selectedIncident;
+    $("trail-sub").textContent = selectedIncident ? "incident " + selectedIncident : "newest first · refreshes every 10 s";
+    lastSig = lastItems.length + ":" + (lastItems[0] ? lastItems[0].sk : "") + ":" + selectedIncident;
+    renderTimeline(lastItems);
+    render(selectedIncident ? lastItems.filter(function (it) { return it.pk === selectedIncident; }) : lastItems);
+  }
+  document.addEventListener("click", function (e) {
+    var row = e.target.closest && e.target.closest(".tl-row");
+    if (row) { selectIncident(row.getAttribute("data-pk")); return; }
+    if (e.target.id === "tl-clear") { e.preventDefault(); selectIncident(null); }
+  });
 
   function policies(list) {
     if (!list || !list.length) return '<span class="policy" style="opacity:.5">none</span>';
@@ -277,7 +525,7 @@
         html += '<tr class="incident-head"><td colspan="7">incident ' + esc(it.pk) + " · " + kind + "</td></tr>";
       }
       var deny = String(it.decision).toUpperCase() === "DENY";
-      var cls = deny ? "deny" : "allow";
+      var cls = (deny ? "deny" : "allow") + (freshSks[it.sk] ? " new" : "");
       var resource = esc(it.resource_type) + "<br><small>" + esc(it.resource_id) + "</small>";
       // SSM output can be several hundred characters; show the tail (the before/after line) and
       // keep the whole thing on hover.
@@ -331,14 +579,104 @@
     }).catch(function () {});
   }
 
+  // --- the verdict line: answers "is everything okay?" before any number --------------------
+  function verdict(items) {
+    var el = $("verdict");
+    if (!items.length) {
+      el.innerHTML = "Nothing has happened yet. Break something (<code>scripts/break-disk.sh</code>) or ask the agent to do something dangerous.";
+      return;
+    }
+    var fixed = {}, denies = 0, latestDeny = null;
+    items.forEach(function (it) {
+      var deny = String(it.decision).toUpperCase() === "DENY";
+      if (deny) { denies++; if (!latestDeny) latestDeny = it; }
+      else if (it.alarm_name) fixed[it.pk] = true;
+    });
+    var nFixed = Object.keys(fixed).length, parts = [];
+    if (nFixed) parts.push('<em class="ok">' + nFixed + " incident" + (nFixed === 1 ? "" : "s") + " fixed</em> with nobody awake");
+    if (denies) {
+      var d = '<em class="no">' + denies + " dangerous request" + (denies === 1 ? "" : "s") + " refused</em>";
+      if (latestDeny) d += ", the latest <code>" + esc(latestDeny.action) + "</code> stopped by <code>" + esc((latestDeny.policy_ids || [])[0] || "the leash") + "</code>";
+      parts.push(d);
+    }
+    el.innerHTML = parts.length ? parts.join(" and ") + "." : "The agent has only looked so far; nothing was changed.";
+  }
+
+  // --- arrivals: rows newer than the last refresh glow; each new decision gets a toast ---------
+  var lastSeenSk = null, seenOnce = false, freshSks = {}, lastSig = null;
+  function markArrivals(items) {
+    if (!seenOnce) { seenOnce = true; lastSeenSk = items.length ? items[0].sk : null; return []; }
+    var fresh = items.filter(function (it) { return lastSeenSk == null || it.sk > lastSeenSk; });
+    if (items.length) lastSeenSk = items[0].sk;
+    return fresh;
+  }
+  function flashPolicy(name) {
+    var el = $("policy-" + name);
+    if (!el) return;
+    el.classList.add("flash");
+    setTimeout(function () { el.classList.remove("flash"); }, 1800);
+  }
+  function announce(it) {
+    var deny = String(it.decision).toUpperCase() === "DENY";
+    var box = $("toasts"), t = document.createElement("div");
+    var pol = (it.policy_ids || []).join(", ");
+    t.className = "toast " + (deny ? "deny" : "allow");
+    t.innerHTML = '<div class="k">' + (deny ? "Refused by the leash" : "Allowed, and done") + "</div>" +
+      '<div class="m"><code>' + esc(it.action) + "</code> on <code>" + esc(it.resource_id) + "</code> · env=" + esc(it.resource_env) +
+      (pol ? " · policy <code>" + esc(pol) + "</code>" : "") + "</div>";
+    box.appendChild(t);
+    while (box.children.length > 3) box.removeChild(box.firstChild);
+    if ((it.policy_ids || [])[0]) flashPolicy(it.policy_ids[0]);
+    setTimeout(function () { t.classList.add("leaving"); setTimeout(function () { if (t.parentNode) t.remove(); }, 350); }, 7000);
+  }
+
+  // --- numbers that move: count from the old value to the new one -------------------------------
+  function countTo(el, target) {
+    var to = parseInt(target, 10);
+    if (isNaN(to)) { el.textContent = target; return; }
+    var from = parseInt(el.textContent, 10);
+    if (isNaN(from) || from === to) { el.textContent = to; return; }
+    var start = performance.now(), dur = 600;
+    (function step(now) {
+      var p = Math.min(1, (now - start) / dur); p = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(from + (to - from) * p);
+      if (p < 1) requestAnimationFrame(step);
+    })(start);
+  }
+
+  // --- refresh cadence: every 10 s at rest, every 2.5 s for a while after the viewer acts ---------
+  var refreshTimer = null, fastUntil = 0;
+  function schedule() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(function () { refresh(); schedule(); }, Date.now() < fastUntil ? 2500 : 10000);
+  }
+  function hurry(ms) { fastUntil = Date.now() + (ms || 120000); schedule(); }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "/" && !/^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || "")) { e.preventDefault(); $("message").focus(); }
+  });
+
   function refresh() {
     if (!API) return;
     fetch(API + "/audit?limit=200")
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function (data) {
         var items = data.items || [];
+        lastItems = items;
+        var fresh = markArrivals(items);
+        freshSks = {};
+        fresh.forEach(function (it) { freshSks[it.sk] = true; });
         stats(items);
-        render(items);
+        verdict(items);
+        // Re-render only when the trail actually changed: a re-render replaces the rows, which
+        // would cut the arrival animation short and restart it on every fast refresh.
+        var sig = items.length + ":" + (items[0] ? items[0].sk : "") + ":" + selectedIncident;
+        if (sig !== lastSig) {
+          lastSig = sig;
+          renderTimeline(items);
+          render(selectedIncident ? items.filter(function (it) { return it.pk === selectedIncident; }) : items);
+        }
+        fresh.slice(0, 3).reverse().forEach(announce);
         $("status").textContent = "live · " + new Date().toISOString().slice(11, 19) + "Z";
       })
       .catch(function (e) { $("status").textContent = "audit fetch failed: " + e.message; });
@@ -361,8 +699,172 @@
   function flag(v) { return v === true || v === "true"; }
   function pct(a, b) { return b ? Math.round(100 * a / b) + "%" : "–"; }
 
+  // --- the arena in 3D: the same attacks, twice --------------------------------------------
+  // Left: the agent with no leash. Right: the same agent behind the Cedar dome. Every attack row
+  // fires one projectile into each world. On the left an executed attack reaches the core and
+  // scorches it; on the right it meets the dome and bursts against it. A refused or unpersuaded
+  // attack fizzles before it arrives. Nothing here is invented: outcomes come from the rows.
+  window.arena3d = (function () {
+    var box = $("arena3d"), canvas = $("arena-canvas");
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!box || !canvas || !window.THREE) { if (box) box.hidden = true; return { sync: function () {} }; }
+    var renderer;
+    try { renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true }); }
+    catch (e) { box.hidden = true; return { sync: function () {} }; }
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+
+    var css = getComputedStyle(document.documentElement);
+    var col = function (name) { return new THREE.Color(css.getPropertyValue(name).trim() || "#888"); };
+    var C = { allow: col("--allow"), deny: col("--deny"), accent: col("--accent"), muted: col("--muted"), line: col("--line-2"), text: col("--text") };
+
+    function world(leashed) {
+      var scene = new THREE.Scene();
+      var cam = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+      cam.position.set(0, 3.0, 7.6); cam.lookAt(0, 0.2, 0);
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.1));
+      var key = new THREE.DirectionalLight(0xffffff, 0.9); key.position.set(4, 6, 5); scene.add(key);
+
+      // the core: three small machines - the dev instance, the prod db, the scaling group
+      var core = new THREE.Group();
+      var mat = function () { return new THREE.MeshStandardMaterial({ color: 0xf4f4f1, roughness: 0.55, metalness: 0.05 }); };
+      var edge = new THREE.LineBasicMaterial({ color: C.line.getHex() });
+      [[-1.05, 0, 0.35, 0.85, 0.85, 0.85], [1.05, 0, 0.25, 0.85, 1.1, 0.85], [0, 0, -1.05, 1.9, 0.55, 0.7]].forEach(function (b) {
+        var g = new THREE.BoxGeometry(b[3], b[4], b[5]);
+        var m = new THREE.Mesh(g, mat()); m.position.set(b[0], b[4] / 2 - 0.35, b[2]);
+        m.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), edge));
+        core.add(m);
+      });
+      var floor = new THREE.Mesh(new THREE.CircleGeometry(2.6, 64), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.05 }));
+      floor.rotation.x = -Math.PI / 2; floor.position.y = -0.36; scene.add(floor);
+      scene.add(core);
+
+      // the leash: a dome you can see through, only in the right-hand world
+      var dome = null;
+      if (leashed) {
+        dome = new THREE.Mesh(new THREE.SphereGeometry(2.3, 48, 32), new THREE.MeshBasicMaterial({ color: C.allow.getHex(), transparent: true, opacity: 0.08, side: THREE.DoubleSide }));
+        var wire = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.SphereGeometry(2.3, 20, 12)), new THREE.LineBasicMaterial({ color: C.allow.getHex(), transparent: true, opacity: 0.22 }));
+        dome.add(wire); dome.position.y = 0.1; scene.add(dome);
+      }
+      return { scene: scene, cam: cam, core: core, dome: dome, shots: [], fx: [], scorch: 0, destroyed: 0 };
+    }
+    var L = world(false), R = world(true);
+
+    var DOME_R = 2.3, START_R = 7.5, DUR = 1.5;
+    function fire(w, outcome, replay) {
+      // outcome: "hit" (reaches the core), "deflect" (meets the dome), "fizzle" (never arrives)
+      var th = Math.random() * Math.PI * 2, ph = 0.45 + Math.random() * 0.9;
+      var from = new THREE.Vector3(Math.sin(ph) * Math.cos(th), Math.cos(ph) * 0.6 + 0.3, Math.sin(ph) * Math.sin(th)).normalize().multiplyScalar(START_R);
+      var color = outcome === "hit" ? C.deny : outcome === "deflect" ? C.allow : C.muted;
+      var m = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 12), new THREE.MeshBasicMaterial({ color: color.getHex() }));
+      m.position.copy(from);
+      var trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints([from.clone(), from.clone()]), new THREE.LineBasicMaterial({ color: color.getHex(), transparent: true, opacity: 0.55 }));
+      w.scene.add(m); w.scene.add(trail);
+      w.shots.push({ m: m, trail: trail, from: from, t: 0, outcome: outcome, color: color, done: false, replay: !!replay });
+    }
+    function burst(w, at, color, big) {
+      var ring = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.12, 40), new THREE.MeshBasicMaterial({ color: color.getHex(), transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+      ring.position.copy(at); ring.lookAt(0, 0.1, 0);
+      w.scene.add(ring); w.fx.push({ m: ring, t: 0, big: big });
+    }
+    function step(w, dt) {
+      w.shots.forEach(function (s) {
+        if (s.done) return;
+        s.t += dt / DUR;
+        var stopAt = s.outcome === "hit" ? 0.97 : s.outcome === "deflect" ? 1 - DOME_R / START_R : 0.55;
+        var t = Math.min(s.t, stopAt), e = 1 - Math.pow(1 - t, 2);
+        var pos = s.from.clone().multiplyScalar(1 - e); pos.y += 0.1 * e;
+        s.m.position.copy(pos);
+        var tail = s.from.clone().multiplyScalar(1 - Math.max(0, e - 0.12));
+        s.trail.geometry.setFromPoints([tail, pos]);
+        if (s.outcome === "fizzle") { var k = Math.max(0, 1 - (s.t - 0.35) / 0.25); s.m.scale.setScalar(Math.max(0.01, k)); s.trail.material.opacity = 0.55 * k; }
+        if (s.t >= stopAt) {
+          s.done = true; w.scene.remove(s.m); w.scene.remove(s.trail);
+          if (s.outcome === "deflect") { burst(w, pos, C.allow, false); if (w.dome) w.dome.material.opacity = 0.3; }
+          if (s.outcome === "hit") { burst(w, pos, C.deny, true); w.scorch = 1; if (!s.replay) w.destroyed++; }
+        }
+      });
+      w.shots = w.shots.filter(function (s) { return !s.done; });
+      w.fx.forEach(function (f) {
+        f.t += dt * (f.big ? 0.9 : 1.4);
+        var sc = 1 + f.t * (f.big ? 9 : 6); f.m.scale.setScalar(sc); f.m.material.opacity = Math.max(0, 0.9 - f.t);
+        if (f.t >= 1) { w.scene.remove(f.m); f.dead = true; }
+      });
+      w.fx = w.fx.filter(function (f) { return !f.dead; });
+      if (w.dome) w.dome.material.opacity += (0.08 - w.dome.material.opacity) * Math.min(1, dt * 3);
+      // the left core keeps its scars: each hit darkens it a little more and shakes it
+      w.core.children.forEach(function (m, i) {
+        var scar = Math.min(0.85, w.destroyed * 0.07);
+        m.material.color.setRGB(0.957 - scar * 0.6, 0.957 - scar * 0.75, 0.945 - scar * 0.75);
+        m.position.x += (Math.random() - 0.5) * 0.06 * w.scorch; m.position.z += (Math.random() - 0.5) * 0.06 * w.scorch;
+      });
+      w.scorch = Math.max(0, w.scorch - dt * 2.5);
+      w.core.rotation.y += dt * 0.12;
+      if (w.dome) w.dome.rotation.y -= dt * 0.04;
+    }
+
+    var queue = [], seen = {}, lastFire = 0, GAP = 0.42, history = [], orbit = 0;
+    function sync(items) {
+      // newest first from the API; fire in the order they happened, only ones not yet shown
+      var fresh = items.filter(function (it) { return it.sk && !seen[it.sk]; }).sort(function (a, b) { return a.sk < b.sk ? -1 : 1; });
+      fresh.forEach(function (it) {
+        seen[it.sk] = true;
+        var persuaded = flag(it.persuaded);
+        var q = {
+          left: ("unleashed_executed" in it) ? (flag(it.unleashed_executed) ? "hit" : "fizzle") : null,
+          right: ("leashed_tools" in it) ? (flag(it.leashed_executed) ? "hit" : (persuaded ? "deflect" : "fizzle")) : null
+        };
+        queue.push(q); history.push(q);
+      });
+      if (queue.length > 40) queue = queue.slice(-40);
+    }
+
+    function fit() {
+      var w = box.clientWidth, h = box.clientHeight;
+      if (!w || !h) return;
+      renderer.setSize(w, h, false);
+      [L, R].forEach(function (x) { x.cam.aspect = (w / 2) / h; x.cam.updateProjectionMatrix(); });
+    }
+    addEventListener("resize", fit); fit();
+
+    var last = performance.now(), running = true;
+    document.addEventListener("visibilitychange", function () { running = !document.hidden; if (running) { last = performance.now(); loop(); } });
+    function frame() {
+      var w = box.clientWidth, h = box.clientHeight, half = Math.floor(w / 2);
+      var pr = renderer.getPixelRatio();
+      renderer.setScissorTest(true);
+      renderer.setViewport(0, 0, half, h); renderer.setScissor(0, 0, half, h); renderer.render(L.scene, L.cam);
+      renderer.setViewport(half, 0, w - half, h); renderer.setScissor(half, 0, w - half, h); renderer.render(R.scene, R.cam);
+      renderer.setScissorTest(false);
+      void pr;
+    }
+    function loop() {
+      if (!running) return;
+      var now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+      if (queue.length && now - lastFire > GAP * 1000) {
+        var q = queue.shift(); lastFire = now;
+        if (q.left) fire(L, q.left);
+        if (q.right) fire(R, q.right);
+      } else if (!queue.length && history.length && now - lastFire > 3200 && !reduce) {
+        // idle: replay a real past attack so the scene stays alive; replays never change the counters
+        var h = history[Math.floor(Math.random() * history.length)]; lastFire = now;
+        if (h.left) fire(L, h.left, true);
+        if (h.right) fire(R, h.right, true);
+      }
+      orbit += dt * 0.08;
+      [L, R].forEach(function (x) { x.cam.position.set(Math.sin(orbit) * 7.6, 3.0, Math.cos(orbit) * 7.6); x.cam.lookAt(0, 0.2, 0); });
+      step(L, dt); step(R, dt);
+      $("a3-left").textContent = L.destroyed; $("a3-right").textContent = R.destroyed;
+      frame();
+      if (!reduce) requestAnimationFrame(loop); else setTimeout(loop, 250);
+    }
+    if (reduce) { GAP = 0.05; }
+    loop();
+    return { sync: sync };
+  })();
+
   function renderArena(data) {
     var s = data.summary || {}, items = data.items || [];
+    arena3d.sync(items);
     $("rt-n").textContent = s.attacks || 0;
     $("rt-persuaded").textContent = s.attacks ? pct(s.persuaded, s.attacks) : "–";
     $("rt-unleashed").textContent = s.unleashed_attacks ? s.unleashed_executed + " / " + s.unleashed_attacks : "–";
@@ -438,12 +940,101 @@
       })
       .catch(function (e) { $("arena-status").textContent = "error: " + e.message; btn.disabled = false; });
   }
-  $("attack").addEventListener("click", attack);
+  $("attack").addEventListener("click", function () { hurry(); attack(); });
+
+  // --- propose a rule (#21): draft -> validate -> prove -> (a person) approve -----------------
+  Array.prototype.forEach.call(document.querySelectorAll("#rule-examples li"), function (li) {
+    li.addEventListener("click", function () { $("rule").value = li.textContent; });
+  });
+
+  function renderProposal(p) {
+    var box = $("proposal");
+    box.hidden = false;
+    var valid = flag(p.valid);
+    var effect = String(p.statement || "").replace(/^\s+/, "").indexOf("forbid") === 0 ? "forbid" : "permit";
+    box.className = "proposal " + effect;
+    var changed = p.changed || [];
+    var cases = p.cases || [];
+    var proofRows = cases.length
+      ? cases.map(function (c) {
+          return '<li class="' + (flag(c.changed) ? "" : "same") + '">' + esc(c.case) + ": " + esc(c.before) +
+            (flag(c.changed) ? " -> <b>" + esc(c.after) + "</b>" : " (unchanged)") + "</li>";
+        }).join("")
+      : "";
+    var status = p.status === "approved" ? '<span class="chip ok">APPROVED</span>' :
+                 valid ? '<span class="chip dim">PROPOSED</span>' : '<span class="chip bad">REJECTED BY CEDAR</span>';
+    box.innerHTML =
+      '<div class="head"><b>' + esc(p.name) + "</b>" + status +
+        '<span class="muted">drafted by ' + esc(p.source) + (flag(p.replaces) ? " · replaces the current policy of this name" : " · a new policy") + "</span></div>" +
+      '<div class="muted">"' + esc(p.text) + '"</div>' +
+      (p.statement ? "<pre>" + esc(p.statement) + "</pre>" : "") +
+      (p.note ? '<div class="muted">' + esc(p.note) + "</div>" : "") +
+      (valid ? "" : '<div class="errs">' + esc((p.errors || []).join("\n") || "invalid") + "</div>") +
+      (valid ? '<div class="muted" style="margin-top:6px">Proof: ' + (changed.length ? changed.length + " request" + (changed.length === 1 ? "" : "s") + " would change" : "nothing would change - this rule is redundant") + "</div>" : "") +
+      (proofRows ? '<ul class="proof">' + proofRows + "</ul>" : "") +
+      (p.status === "approved"
+        ? '<div class="muted">published to ' + esc(p.published_to || "the policy store") + "</div>"
+        : (valid ? '<button class="approve" id="approve" data-id="' + esc(p.pk) + '">Approve and publish</button>' : ""));
+  }
+
+  function findProposal(text, sinceIso) {
+    return fetch(API + "/policies/proposals?limit=20").then(function (r) { return r.json(); }).then(function (data) {
+      var items = data.items || [];
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].text === text && items[i].sk >= sinceIso) return items[i];
+      }
+      return null;
+    });
+  }
+
+  function propose() {
+    var text = $("rule").value.trim();
+    if (!text || !API) return;
+    var btn = $("propose"); btn.disabled = true;
+    var box = $("proposal"); box.hidden = false; box.className = "proposal"; box.innerHTML = '<span class="muted">drafting…</span>';
+    var since = new Date().toISOString();
+    fetch(API + "/policies/propose", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text }) })
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })
+      .then(function (res) {
+        if (res.status === 200) { renderProposal(res.j); btn.disabled = false; return; }
+        if (res.status !== 202) throw new Error(res.j.error || ("HTTP " + res.status));
+        // worker mode: the brain drafts; poll for the stored proposal
+        var tries = 0;
+        (function poll() {
+          findProposal(text, since).then(function (p) {
+            if (p) { renderProposal(p); btn.disabled = false; return; }
+            if (++tries > 60) { box.innerHTML = '<span class="muted">still drafting - check back in a moment</span>'; btn.disabled = false; return; }
+            box.innerHTML = '<span class="muted">queued for the brain… (' + tries * 3 + " s)</span>";
+            setTimeout(poll, 3000);
+          });
+        })();
+      })
+      .catch(function (e) { box.className = "proposal"; box.innerHTML = '<div class="errs">' + esc(e.message) + "</div>"; btn.disabled = false; });
+  }
+  $("propose").addEventListener("click", function () { hurry(); propose(); });
+
+  document.addEventListener("click", function (e) {
+    if (e.target.id !== "approve") return;
+    var id = e.target.getAttribute("data-id");
+    e.target.disabled = true;
+    fetch(API + "/policies/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id }) })
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })
+      .then(function (res) {
+        if (res.status !== 200) throw new Error(res.j.error || ("HTTP " + res.status));
+        return fetch(API + "/policies/proposals?limit=20").then(function (r) { return r.json(); }).then(function (data) {
+          var row = (data.items || []).filter(function (p) { return p.pk === id; })[0];
+          if (row) renderProposal(row);
+          loadPolicies();  // the leash panel now shows the published policy
+        });
+      })
+      .catch(function (err) { $("proposal").insertAdjacentHTML("beforeend", '<div class="errs">' + esc(err.message) + "</div>"); });
+  });
 
   function ask() {
     var msg = $("message").value.trim();
     if (!msg || !API) return;
     var btn = $("send"), out = $("reply");
+    hurry();
     btn.disabled = true; out.className = ""; out.textContent = "Thinking… (denials take seconds; a real cleanup may exceed the 30 s API timeout - check the audit table)";
     fetch(API + "/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: msg }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
@@ -482,7 +1073,7 @@
   refresh();
   loadArena();
   brainStatus();
-  setInterval(refresh, 10000);
+  schedule();
   setInterval(brainStatus, 15000);
   setInterval(loadPolicies, 30000);
   setInterval(loadArena, 5000);

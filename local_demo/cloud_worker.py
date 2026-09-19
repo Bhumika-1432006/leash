@@ -75,6 +75,15 @@ def handle_request(body: dict) -> None:
         result = handler({"mode": "chat", "message": body["message"], "incident_id": incident_id}, None)
         audit.write_reply(incident_id, str(result["reply"]))
         print(f"[chat] reply written: {str(result['reply'])[:200]}", flush=True)
+    elif kind == "propose":
+        # #21: the brain has the model, so it drafts; Cedar validates; the row lands for a human.
+        from agent.agent import drafter_or_none
+        from common.proposals import propose
+
+        print(f"[propose] {body['text'][:120]}", flush=True)
+        row = propose(body["text"], drafter=drafter_or_none())
+        print(f"[propose] {row['pk']}: {row['name']} valid={row['valid']} source={row['source']} "
+              f"changed={row['changed']}", flush=True)
     elif kind == "redteam":
         from redteam import attacks as attacks_mod, runner
         from redteam.handler import resource_ids
@@ -125,9 +134,10 @@ def main(argv: list[str]) -> int:
                 try:
                     body = json.loads(msg["Body"])
                     fn(body)
-                except Exception as exc:  # noqa: BLE001 - keep the worker alive, report, drop the message
+                except Exception as exc:  # noqa: BLE001 - keep the worker alive; SQS will retry
                     print(f"[{name}] failed: {type(exc).__name__}: {exc}", flush=True)
-                sqs.delete_message(QueueUrl=url, ReceiptHandle=msg["ReceiptHandle"])
+                else:
+                    sqs.delete_message(QueueUrl=url, ReceiptHandle=msg["ReceiptHandle"])
         if once and not got:
             idle_rounds += 1
             if idle_rounds >= 2:
