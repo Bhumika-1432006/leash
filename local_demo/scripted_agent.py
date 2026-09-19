@@ -111,3 +111,4 @@ def install() -> None:
 
     agent_handler._AGENT = None
     agent_handler.build_agent = lambda incident_id: ScriptedAgent()
+    os.environ["LEASH_SCRIPTED_AGENT"] = "1"  # /health reports "scripted" as the brain

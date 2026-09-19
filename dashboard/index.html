@@ -325,6 +325,7 @@
       var b = h.brain || {};
       var el = $("brain");
       if (b.mode === "bedrock") { el.textContent = "brain: Bedrock in Lambda"; el.style.color = "var(--allow)"; return; }
+      if (b.mode === "local") { el.textContent = "brain: " + (b.model || "local model") + " in this process (local demo)"; el.style.color = "var(--allow)"; return; }
       if (b.online) { el.textContent = "brain online · " + (b.model || "local model") + " on " + (b.host || "a worker"); el.style.color = "var(--allow)"; }
       else { el.textContent = "brain offline · requests will queue until the worker is back"; el.style.color = "var(--warn)"; }
     }).catch(function () {});

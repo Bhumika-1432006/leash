@@ -192,7 +192,13 @@ def _policy_files() -> tuple[dict, str]:
     base = cedar_dir()
     files = {name: (base / "policies" / f"{name}.cedar").read_text(encoding="utf-8") for name in POLICY_NAMES}
     files["schema"] = (base / "schema.json").read_text(encoding="utf-8")
-    return files, f"disk:{base}"
+    # Same role as the S3 ETag version: identifies the policy set in force and changes the
+    # moment any policy text changes. A content hash, not a path, so it is stable and
+    # does not leak the machine's directory layout onto the dashboard.
+    import hashlib
+
+    digest = hashlib.sha256("".join(files[k] for k in sorted(files)).encode("utf-8")).hexdigest()[:8]
+    return files, f"disk:{digest}"
 
 
 def _policy_files_s3(bucket: str) -> tuple[dict, str]:
