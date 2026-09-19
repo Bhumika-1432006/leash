@@ -41,6 +41,8 @@ schedule page and the form closes hard.
   for the Ask box and alarms to be answered; the audit trail and policies are served regardless.
 - Cost guard: the HTTP API is throttled (5 req/s, burst 10); the agent role has explicit denies on
   every delete API; tear down with `scripts/teardown.sh` once results are announced.
+- Public-URL guard: publishing a policy and launching a red-team run need the operator token; a
+  visitor can read everything, ask the agent (leashed), and propose a rule (never published).
 
 ## Extra credit
 
