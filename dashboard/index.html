@@ -925,14 +925,31 @@
       .catch(function (e) { $("arena-status").textContent = "red-team fetch failed: " + e.message; });
   }
 
+  // Publishing a policy and launching attacks change what the system does, so they need the
+  // operator token (a stack parameter). Kept in this browser only; a 401 clears it.
+  function operatorHeaders() {
+    var t = "";
+    try { t = localStorage.getItem("leashOperatorToken") || ""; } catch (e) {}
+    if (!t) {
+      t = window.prompt("Operator token (the stack's OperatorToken parameter). Only needed to publish a policy or launch attacks.") || "";
+      try { if (t) localStorage.setItem("leashOperatorToken", t); } catch (e) {}
+    }
+    return t ? { "Content-Type": "application/json", "x-leash-token": t } : { "Content-Type": "application/json" };
+  }
+  function forgetOperator(status) {
+    if (status === 401) { try { localStorage.removeItem("leashOperatorToken"); } catch (e) {} }
+  }
+
   function attack() {
     if (!API) return;
     var btn = $("attack");
+    var headers = operatorHeaders();
     btn.disabled = true;
     $("arena-status").textContent = "starting…";
-    fetch(API + "/redteam", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ n: 20 }) })
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    fetch(API + "/redteam", { method: "POST", headers: headers, body: JSON.stringify({ n: 20 }) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
       .then(function (res) {
+        forgetOperator(res.status);
         if (!res.ok || res.j.error) { $("arena-status").textContent = "error: " + (res.j.error || "request failed"); btn.disabled = false; return; }
         var before = parseInt($("rt-n").textContent, 10) || 0;
         arenaPending = before + res.j.n;
@@ -1016,11 +1033,13 @@
   document.addEventListener("click", function (e) {
     if (e.target.id !== "approve") return;
     var id = e.target.getAttribute("data-id");
+    var headers = operatorHeaders();
     e.target.disabled = true;
-    fetch(API + "/policies/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id }) })
+    fetch(API + "/policies/approve", { method: "POST", headers: headers, body: JSON.stringify({ id: id }) })
       .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })
       .then(function (res) {
-        if (res.status !== 200) throw new Error(res.j.error || ("HTTP " + res.status));
+        forgetOperator(res.status);
+        if (res.status !== 200) { e.target.disabled = false; throw new Error(res.j.error || ("HTTP " + res.status)); }
         return fetch(API + "/policies/proposals?limit=20").then(function (r) { return r.json(); }).then(function (data) {
           var row = (data.items || []).filter(function (p) { return p.pk === id; })[0];
           if (row) renderProposal(row);

@@ -18,6 +18,7 @@ matched route. See https://docs.aws.amazon.com/apigateway/latest/developerguide/
 """
 
 import base64
+import hmac
 import json
 import os
 
@@ -26,7 +27,7 @@ import boto3
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization,x-leash-token",
     "Content-Type": "application/json",
 }
 
@@ -64,6 +65,25 @@ def _response(status: int, body) -> dict:
 
 def _error(status: int, message: str) -> dict:
     return _response(status, {"error": message})
+
+
+OPERATOR_HEADER = "x-leash-token"
+
+
+def _require_operator(event: dict):
+    """The two routes that change what the system does - publishing a policy and launching an
+    attack run - need the operator token (OPERATOR_TOKEN, a stack parameter). The dashboard URL is
+    public; without this, anyone with the link could rewrite the leash. Returns an error
+    response, or None when the caller may proceed. With no token configured (the local demo,
+    tests) the routes are open; the template makes the parameter mandatory for a deployment."""
+    expected = os.environ.get("OPERATOR_TOKEN", "")
+    if not expected:
+        return None
+    headers = {str(k).lower(): str(v) for k, v in (event.get("headers") or {}).items()}
+    given = headers.get(OPERATOR_HEADER, "")
+    if not given or not hmac.compare_digest(given, expected):
+        return _error(401, f"operator token required ({OPERATOR_HEADER} header)")
+    return None
 
 
 def _read_body(event: dict):
@@ -158,6 +178,9 @@ MAX_REDTEAM_N = 100
 
 def _redteam_post(event: dict) -> dict:
     """Kick off a run: n attacks, both arms by default. Returns immediately; rows stream in."""
+    denied = _require_operator(event)
+    if denied:
+        return denied
     try:
         body = _read_body(event)
     except (ValueError, UnicodeDecodeError) as exc:
@@ -282,7 +305,11 @@ def _proposals(event: dict) -> dict:
 
 
 def _approve(event: dict) -> dict:
-    """The only path that publishes a policy. A person clicked Approve on a proposal Cedar accepted."""
+    """The only path that publishes a policy. A person with the operator token clicked Approve on a
+    proposal Cedar accepted."""
+    denied = _require_operator(event)
+    if denied:
+        return denied
     try:
         body = _read_body(event)
     except (ValueError, UnicodeDecodeError) as exc:
