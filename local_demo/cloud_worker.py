@@ -125,9 +125,10 @@ def main(argv: list[str]) -> int:
                 try:
                     body = json.loads(msg["Body"])
                     fn(body)
-                except Exception as exc:  # noqa: BLE001 - keep the worker alive, report, drop the message
+                except Exception as exc:  # noqa: BLE001 - keep the worker alive; SQS will retry
                     print(f"[{name}] failed: {type(exc).__name__}: {exc}", flush=True)
-                sqs.delete_message(QueueUrl=url, ReceiptHandle=msg["ReceiptHandle"])
+                else:
+                    sqs.delete_message(QueueUrl=url, ReceiptHandle=msg["ReceiptHandle"])
         if once and not got:
             idle_rounds += 1
             if idle_rounds >= 2:
