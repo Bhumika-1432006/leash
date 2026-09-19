@@ -47,7 +47,7 @@ class FakeEcs:
                               "runningCount": 0, "desiredCount": self.desired, "status": "ACTIVE"}]}
 
     def list_tags_for_resource(self, resourceArn):
-        return {"tags": [{"key": "env", "value": self.env}] if self.env else {"tags": []}}
+        return {"tags": [{"key": "env", "value": self.env}] if self.env else []}
 
     desired = 1
 
