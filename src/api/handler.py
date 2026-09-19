@@ -235,7 +235,70 @@ def _ask(event: dict) -> dict:
     return _response(200, result)
 
 
+def _propose(event: dict) -> dict:
+    """English -> Cedar (#21). Drafts, validates, proves, stores. Never publishes.
+
+    Worker mode: queued to the brain (it has the model); the row appears in GET /policies/proposals.
+    Otherwise: runs here, with the model if one is configured, else the template drafter."""
+    try:
+        body = _read_body(event)
+    except (ValueError, UnicodeDecodeError) as exc:
+        return _error(400, f"invalid JSON body: {exc}")
+    text = body.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return _error(400, "'text' (non-empty string) is required")
+    from common.proposals import MAX_TEXT
+
+    if len(text) > MAX_TEXT:
+        return _error(400, f"text longer than {MAX_TEXT} characters")
+    if os.environ.get("REQUEST_QUEUE_URL"):
+        _queue("propose", {"text": text.strip()})
+        return _response(202, {"status": "queued", "text": text.strip()})
+    from common.proposals import propose
+
+    try:
+        from agent.agent import drafter_or_none
+
+        drafter = drafter_or_none()
+    except Exception:  # noqa: BLE001 - no model stack in this process: template drafting only
+        drafter = None
+    return _response(200, propose(text, drafter=drafter))
+
+
+def _proposals(event: dict) -> dict:
+    from common.proposals import list_proposals
+
+    params = event.get("queryStringParameters") or {}
+    try:
+        limit = int(params.get("limit", 20))
+    except (TypeError, ValueError):
+        return _error(400, "limit must be an integer")
+    return _response(200, {"items": list_proposals(limit=max(1, min(limit, 100)))})
+
+
+def _approve(event: dict) -> dict:
+    """The only path that publishes a policy. A person clicked Approve on a proposal Cedar accepted."""
+    try:
+        body = _read_body(event)
+    except (ValueError, UnicodeDecodeError) as exc:
+        return _error(400, f"invalid JSON body: {exc}")
+    pid = body.get("id")
+    if not isinstance(pid, str) or not pid.startswith("proposal-"):
+        return _error(400, "'id' (a proposal id) is required")
+    from common.proposals import approve
+
+    try:
+        return _response(200, approve(pid))
+    except LookupError as exc:
+        return _error(404, str(exc))
+    except ValueError as exc:
+        return _error(409, str(exc))
+
+
 ROUTES = {
+    "POST /policies/propose": _propose,
+    "GET /policies/proposals": _proposals,
+    "POST /policies/approve": _approve,
     "GET /health": _health,
     "GET /audit": _audit,
     "GET /policies": _policies,
