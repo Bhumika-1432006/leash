@@ -300,6 +300,13 @@ The `DashboardUrl` output is a static page that talks only to the HTTP API:
   through `GET /policies`, so what is displayed is exactly what is enforced. Click a policy id in
   any audit row to jump to the rule.
 - **Ask the agent**: a chat box wired to `POST /ask` for the denial beats.
+- **Propose a rule**: English in, Cedar out. The draft is validated against the schema, proved
+  against a fixed set of requests (every answer that would flip is listed), and published to the
+  versioned policy bucket only when a person clicks Approve.
+
+Two actions change what the system does, publishing a policy and launching a red-team run, and
+those need the stack's `OperatorToken` (the dashboard asks once and keeps it in the browser).
+Everything else on the page is read-only or goes through the leash, so the URL can be public.
 
 ## Demo script
 
