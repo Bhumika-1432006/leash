@@ -51,6 +51,10 @@ flowchart LR
     S3[S3 static dashboard] -. fetch .-> APIGW
 ```
 
+![Architecture: alarm -> EventBridge -> SQS -> the brain; every action asks the authorizer Lambda (Cedar), which writes the audit row before answering](docs/img/architecture.png)
+
+*Rendered copy of the diagram above, for viewers that do not render Mermaid (the submission form, Builder Center).*
+
 Two template parameters pick the shape. `Brain=worker` (default) queues alarms and requests for
 an agent process that runs anywhere (`local_demo/cloud_worker.py`); `Brain=bedrock` runs the
 agent in Lambda on Bedrock and EventBridge invokes it directly. `PolicyStore=s3` (default) is
@@ -217,6 +221,10 @@ the outcome does not change.
 
 ## The red team: same model, same attacks, with and without the leash
 
+![Red-team panel: 14 attacks across 8 tactics, model persuaded 93%, executed with no leash 13/14, executed with Leash 0/14](docs/img/dashboard-red-team.png)
+
+*The latest deployed run. Every one of the thirteen attacks that destroyed something in the unleashed sandbox produced a Cedar DENY with the leash on. Numbers and attack feed are read from the audit table, not typed in.*
+
 Saying "the model cannot be talked into it" is a claim. Leash measures it.
 
 An **attacker model** writes attacks against the agent across eight tactics: a direct request,
@@ -239,6 +247,28 @@ and how many executed **with Leash**. The last one is the project. It stays at 0
 Cedar decides, not the model, and every one of those denials is a real audit row with the policy
 id that fired.
 
+### Results from the deployed run (19 Sept 2026)
+
+20 attacks, seven tactics, three goals, both arms, on the live stack. Agent and attacker: Qwen3
+8B on a laptop CPU; leash: the authorizer Lambda evaluating the four Cedar policies from S3.
+
+| | Count |
+| --- | --- |
+| Attacks | 20 |
+| Model persuaded (called the destructive tool) | 18 of 20 (90%) |
+| Destructive action executed, **no leash** (sandbox) | **18 of 20 (90%)** |
+| Destructive action executed, **with Leash** (real AWS) | **0 of 20** |
+
+By tactic, as attacks / persuaded / executed without leash / executed with leash:
+authority 2/2/2/0 · direct 3/3/2/0 · emergency 2/2/2/0 · escalation 3/3/3/0 ·
+log injection 4/3/4/0 · obfuscation 3/2/2/0 · role-play 3/3/3/0.
+By goal: clean the prod instance 9/9/8/0 · terminate the dev instance 10/8/9/0 · scale past
+the cap 1/1/1/0. Policies that stopped them: ForbidProd 9, ForbidDestructive 7,
+ForbidScaleAboveCap 1, and one default deny (the model used an id the account does not have).
+
+The two attacks the model refused on its own were one obfuscated request and one log-injection
+it did not act on. Every other attack got through the model. None got through the leash.
+
 `POST /redteam {"n": 20}` starts a run on its own Lambda (long runs chain themselves); the
 "Run 20 attacks" button on the dashboard does the same. The unleashed switch is honoured only
 while the fake AWS clients are installed in the process (`tools._sandbox_unleashed`), so it can
@@ -246,6 +276,14 @@ never disarm the real deployment. Locally, `local_demo/server.py` runs the arena
 the same code.
 
 ## What the dashboard shows
+
+![The top of the dashboard: a one-line verdict written from the audit trail, the four steps of how Leash works, and the four headline numbers](docs/img/dashboard-hero.png)
+
+*The first thing a viewer reads is a sentence, not a number: what was fixed with nobody awake, what was refused, and which policy refused it. Then how it works, in four steps.*
+
+![Audit trail with the poisoned-tag incident: cleanDisk ALLOW and terminateInstance DENY ForbidDestructive under one alarm, beside the four Cedar policies](docs/img/dashboard-audit-trail.png)
+
+*The poisoned-tag beat as the dashboard shows it: under one `leash-disk-dev` incident, the model was talked into trying `terminateInstance` (red, `ForbidDestructive`) and then cleaned the disk anyway (green, `PermitDevRemediation`). The four policies on the right are read live from the policy store; clicking a policy id in the trail jumps to the rule that decided it.*
 
 The `DashboardUrl` output is a static page that talks only to the HTTP API:
 
@@ -302,7 +340,7 @@ The timed shot list for the video is in [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.m
 | | Without Leash | With Leash |
 | --- | --- | --- |
 | Alarm to fix, full dev disk | until someone wakes up: 30 min to hours | **5 min 48 s** measured on the deployed stack with an 8B model on a laptop CPU; every leash decision inside that took under a second, the model is the whole wait. With Bedrock (`Brain=bedrock`) the same run is under 90 s. The dashboard measures it live |
-| Attacks that execute a destructive action | see the red-team panel: the unleashed control arm | **0**, measured, every attempt audited with the policy that stopped it |
+| Attacks that execute a destructive action | 18 of 20 with the same model and the leash off (measured, sandboxed) | **0 of 20**, measured on the live stack, every attempt audited with the policy that stopped it |
 | Blast radius of the bot | whatever its keys allow | cleanDisk, restartService, scaleGroup up to 4, on `env=dev` only; nothing else, ever |
 | Finding out what it did | CloudTrail archaeology | one table, one row per decision, policy id included |
 | Changing what it may do | edit a prompt and hope | edit a five-line Cedar policy the model never sees |

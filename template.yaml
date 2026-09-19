@@ -205,6 +205,12 @@ Resources:
   # agent process (local_demo/cloud_worker.py) runs anywhere with AWS creds and
   # a model, and every decision still goes through the authorizer in AWS.
   # -------------------------------------------------------------------------
+  IncidentDLQ:
+    Type: AWS::SQS::Queue
+    Condition: UseWorker
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-incidents-dlq"
+      MessageRetentionPeriod: 1209600
   IncidentQueue:
     Type: AWS::SQS::Queue
     Condition: UseWorker
@@ -212,6 +218,15 @@ Resources:
       QueueName: !Sub "${AWS::StackName}-incidents"
       VisibilityTimeout: 900
       MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt IncidentDLQ.Arn
+        maxReceiveCount: 3
+  RequestDLQ:
+    Type: AWS::SQS::Queue
+    Condition: UseWorker
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-requests-dlq"
+      MessageRetentionPeriod: 1209600
   RequestQueue:
     Type: AWS::SQS::Queue
     Condition: UseWorker
@@ -219,6 +234,9 @@ Resources:
       QueueName: !Sub "${AWS::StackName}-requests"
       VisibilityTimeout: 900
       MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RequestDLQ.Arn
+        maxReceiveCount: 3
   AlarmToQueueRule:
     Type: AWS::Events::Rule
     Condition: UseWorker

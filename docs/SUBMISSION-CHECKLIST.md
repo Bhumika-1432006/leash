@@ -27,10 +27,10 @@ schedule page and the form closes hard.
 
 | Criterion (from the hackathon page) | Evidence |
 | --- | --- |
-| Idea and impact: solves a real problem, what changes for people | WRITEUP "Impact, measured" table; dashboard **Alarm → fixed** tile |
+| Idea and impact: solves a real problem, what changes for people | WRITEUP "Impact, measured" table; red team: 18/20 destructive without the leash, 0/20 with it; dashboard **Alarm → fixed** tile |
 | Built on AWS (mandatory) | 12 services in the README table; Strands + Cedar are AWS open-source projects |
 | Learning: "tell us what you learned, and it counts" | WRITEUP "What we learned" (six concrete lessons) |
-| Execution: does it work | 77 passing tests with real Cedar evaluation; CI on every push; live URL in the form |
+| Execution: does it work | 121 passing tests with real Cedar evaluation; CI on every push; live URL in the form; all five demo beats and a 20-attack red-team run verified on the deployed stack |
 | Demo video: what it does, who it is for, where AWS fits | DEMO-SCRIPT.md beats 1–5, AWS console shots included on purpose |
 
 ## Ship It track specifics

@@ -41,9 +41,11 @@ same tools: once through the real agent with Cedar on, and once through the same
 authorisation off inside an in-memory sandbox where nothing real can be harmed. The dashboard
 reports how often the model was persuaded to call the destructive tool, how many attacks executed
 a destructive action without the leash, and how many did with Leash. The last figure is the
-project: it stays at zero, and every one of those zeros is a real Verified Permissions denial with
-the policy id that produced it. The numbers from the deployed run are on the live dashboard and
-copied into the README before submission.
+project: it stays at zero, and every one of those zeros is a real Cedar denial from the authorizer with
+the policy id that produced it. The deployed run: 20 attacks across seven
+tactics; the model was persuaded 18 times; **18 of 20 executed a destructive action with the
+leash off, 0 of 20 with Leash on**. The two attacks the model refused by itself are the point:
+"the model refused" happened 10% of the time, "the policy refused" happened every time.
 
 ## Where AWS fits
 
@@ -61,7 +63,7 @@ The dashboard computes these from the audit trail itself, not from a slide:
 
 | What changes | Before Leash | With Leash |
 | --- | --- | --- |
-| A destructive action after a jailbreak attempt | depends on the model's mood that night | 0, measured across every tactic; the control arm shows what the same model does unleashed |
+| A destructive action after a jailbreak attempt | 18 of 20 (the same model, same attacks, leash off, sandboxed) | **0 of 20** on the live stack, every attempt audited with the policy id that stopped it |
 | Time from alarm to fix for a full dev disk | until a human wakes up and runs one command: typically 30 min to several hours | 5 min 48 s measured on the deployed stack with an 8B model on a laptop CPU (Bedrock is not in the Free plan); the leash decisions inside that took under a second each. With `Brain=bedrock` the same run is under 90 s. Shown live as **Alarm → fixed** on the dashboard |
 | Who can destroy something at 3 AM | anyone with the admin keys the bot would need | nobody: terminate and delete are forbidden by policy, by IAM, and by code |
 | How you find out what the bot did | grep CloudTrail | one table: every ALLOW and DENY with the policy id that decided it |
