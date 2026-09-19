@@ -423,12 +423,14 @@
     return Math.floor(sec / 60) + " m " + Math.round(sec % 60) + " s";
   }
 
+  function isRedTeam(it) { return String(it.pk || "").indexOf("redteam-") === 0; }
+
   function stats(items) {
-    var allow = 0, deny = 0, incidents = {}, alarms = 0, fixes = [];
+    var allow = 0, deny = 0, incidents = {}, alarms = 0, attacks = 0, fixes = [];
     items.forEach(function (it) {
       var isDeny = String(it.decision).toUpperCase() === "DENY";
       if (isDeny) deny++; else allow++;
-      if (!incidents[it.pk]) { incidents[it.pk] = true; if (it.alarm_name) alarms++; }
+      if (!incidents[it.pk]) { incidents[it.pk] = true; if (it.alarm_name) alarms++; else if (isRedTeam(it)) attacks++; }
       if (!isDeny && it.alarm_name) {
         var start = parseIncidentStart(it.pk), end = parseSk(it.sk);
         if (start != null && end != null && end >= start) fixes.push((end - start) / 1000);
@@ -438,7 +440,7 @@
     countTo($("n-allow"), allow);
     countTo($("n-deny"), deny);
     countTo($("n-incidents"), n);
-    $("n-incidents-sub").textContent = alarms + " from alarms · " + (n - alarms) + " from humans";
+    $("n-incidents-sub").textContent = alarms + " from alarms · " + (n - alarms - attacks) + " from humans" + (attacks ? " · " + attacks + " red-team attacks" : "");
     var med = median(fixes);
     $("n-ttf").textContent = fmtSeconds(med);
     $("n-ttf-sub").textContent = med == null ? "no auto-fixed alarm yet" : "median over " + fixes.length + " auto-fixed alarm" + (fixes.length === 1 ? "" : "s") + " · no human involved";
@@ -521,7 +523,7 @@
     items.forEach(function (it) {
       if (it.pk !== lastPk) {
         lastPk = it.pk;
-        var kind = it.alarm_name ? "alarm " + esc(it.alarm_name) : "human request";
+        var kind = it.alarm_name ? "alarm " + esc(it.alarm_name) : (isRedTeam(it) ? "red-team attack" : "human request");
         html += '<tr class="incident-head"><td colspan="7">incident ' + esc(it.pk) + " · " + kind + "</td></tr>";
       }
       var deny = String(it.decision).toUpperCase() === "DENY";
@@ -586,19 +588,20 @@
       el.innerHTML = "Nothing has happened yet. Break something (<code>scripts/break-disk.sh</code>) or ask the agent to do something dangerous.";
       return;
     }
-    var fixed = {}, denies = 0, latestDeny = null;
+    var fixed = {}, denies = 0, attackDenies = 0, latestDeny = null;
     items.forEach(function (it) {
       var deny = String(it.decision).toUpperCase() === "DENY";
-      if (deny) { denies++; if (!latestDeny) latestDeny = it; }
+      if (deny) {
+        if (isRedTeam(it)) attackDenies++; else denies++;
+        if (!latestDeny) latestDeny = it;
+      }
       else if (it.alarm_name) fixed[it.pk] = true;
     });
     var nFixed = Object.keys(fixed).length, parts = [];
     if (nFixed) parts.push('<em class="ok">' + nFixed + " incident" + (nFixed === 1 ? "" : "s") + " fixed</em> with nobody awake");
-    if (denies) {
-      var d = '<em class="no">' + denies + " dangerous request" + (denies === 1 ? "" : "s") + " refused</em>";
-      if (latestDeny) d += ", the latest <code>" + esc(latestDeny.action) + "</code> stopped by <code>" + esc((latestDeny.policy_ids || [])[0] || "the leash") + "</code>";
-      parts.push(d);
-    }
+    if (denies) parts.push('<em class="no">' + denies + " dangerous request" + (denies === 1 ? "" : "s") + " refused</em>");
+    if (attackDenies) parts.push('<em class="no">' + attackDenies + " red-team attack" + (attackDenies === 1 ? "" : "s") + " stopped</em>");
+    if (latestDeny && (denies || attackDenies)) parts[parts.length - 1] += ", the latest <code>" + esc(latestDeny.action) + "</code> stopped by <code>" + esc((latestDeny.policy_ids || [])[0] || "the leash") + "</code>";
     el.innerHTML = parts.length ? parts.join(" and ") + "." : "The agent has only looked so far; nothing was changed.";
   }
 
@@ -925,14 +928,31 @@
       .catch(function (e) { $("arena-status").textContent = "red-team fetch failed: " + e.message; });
   }
 
+  // Publishing a policy and launching attacks change what the system does, so they need the
+  // operator token (a stack parameter). Kept in this browser only; a 401 clears it.
+  function operatorHeaders() {
+    var t = "";
+    try { t = localStorage.getItem("leashOperatorToken") || ""; } catch (e) {}
+    if (!t) {
+      t = window.prompt("Operator token (the stack's OperatorToken parameter). Only needed to publish a policy or launch attacks.") || "";
+      try { if (t) localStorage.setItem("leashOperatorToken", t); } catch (e) {}
+    }
+    return t ? { "Content-Type": "application/json", "x-leash-token": t } : { "Content-Type": "application/json" };
+  }
+  function forgetOperator(status) {
+    if (status === 401) { try { localStorage.removeItem("leashOperatorToken"); } catch (e) {} }
+  }
+
   function attack() {
     if (!API) return;
     var btn = $("attack");
+    var headers = operatorHeaders();
     btn.disabled = true;
     $("arena-status").textContent = "starting…";
-    fetch(API + "/redteam", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ n: 20 }) })
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    fetch(API + "/redteam", { method: "POST", headers: headers, body: JSON.stringify({ n: 20 }) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
       .then(function (res) {
+        forgetOperator(res.status);
         if (!res.ok || res.j.error) { $("arena-status").textContent = "error: " + (res.j.error || "request failed"); btn.disabled = false; return; }
         var before = parseInt($("rt-n").textContent, 10) || 0;
         arenaPending = before + res.j.n;
@@ -1016,11 +1036,13 @@
   document.addEventListener("click", function (e) {
     if (e.target.id !== "approve") return;
     var id = e.target.getAttribute("data-id");
+    var headers = operatorHeaders();
     e.target.disabled = true;
-    fetch(API + "/policies/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id }) })
+    fetch(API + "/policies/approve", { method: "POST", headers: headers, body: JSON.stringify({ id: id }) })
       .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })
       .then(function (res) {
-        if (res.status !== 200) throw new Error(res.j.error || ("HTTP " + res.status));
+        forgetOperator(res.status);
+        if (res.status !== 200) { e.target.disabled = false; throw new Error(res.j.error || ("HTTP " + res.status)); }
         return fetch(API + "/policies/proposals?limit=20").then(function (r) { return r.json(); }).then(function (data) {
           var row = (data.items || []).filter(function (p) { return p.pk === id; })[0];
           if (row) renderProposal(row);
