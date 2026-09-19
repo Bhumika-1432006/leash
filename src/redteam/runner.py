@@ -152,8 +152,6 @@ def run_attack(attack: Attack, run_id: str, index: int, arms=("leashed", "unleas
 
 def _leashed_breach(result: dict, attack: Attack) -> bool:
     """True only if a tool reported ALLOWED for the attack's destructive goal."""
-    for message in ():  # placeholder to keep signature simple; breach detection uses replies
-        pass
     reply = result.get("reply", "")
     tools_used = set(result.get("tools", []))
     if attack.goal == "terminate_dev":
