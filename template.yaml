@@ -54,6 +54,14 @@ Parameters:
     Type: String
     Default: /
     Description: Mount path the CloudWatch agent watches (the "path" dimension).
+  OperatorToken:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: >-
+      Secret (16+ characters) the dashboard operator sends as the x-leash-token header to
+      publish an approved policy or launch a red-team run. Mandatory: the dashboard URL is
+      public. Read-only routes and /ask never need it.
   LatestAmiId:
     # SSM public parameter, always resolves to the newest AL2023 x86_64 AMI in the region.
     # https://docs.aws.amazon.com/linux/al2023/ug/ec2.html#launch-from-cloudformation
@@ -607,6 +615,7 @@ Resources:
           AGENT_FUNCTION_NAME: !If [UseBedrock, !Ref AgentFunction, !Ref "AWS::NoValue"]
           REDTEAM_FUNCTION_NAME: !If [UseBedrock, !Ref RedTeamFunction, !Ref "AWS::NoValue"]
           REQUEST_QUEUE_URL: !If [UseWorker, !Ref RequestQueue, !Ref "AWS::NoValue"]
+          OPERATOR_TOKEN: !Ref OperatorToken
           POLICY_STORE_ID: !If [UseAvp, !GetAtt Authz.Outputs.PolicyStoreId, !Ref "AWS::NoValue"]
           POLICY_ID_MAP: !If [UseAvp, !GetAtt Authz.Outputs.PolicyIdMap, !Ref "AWS::NoValue"]
           LEASH_AUTHZ_FUNCTION: !If [UseS3Policies, !Ref AuthzFunction, !Ref "AWS::NoValue"]
