@@ -423,12 +423,14 @@
     return Math.floor(sec / 60) + " m " + Math.round(sec % 60) + " s";
   }
 
+  function isRedTeam(it) { return String(it.pk || "").indexOf("redteam-") === 0; }
+
   function stats(items) {
-    var allow = 0, deny = 0, incidents = {}, alarms = 0, fixes = [];
+    var allow = 0, deny = 0, incidents = {}, alarms = 0, attacks = 0, fixes = [];
     items.forEach(function (it) {
       var isDeny = String(it.decision).toUpperCase() === "DENY";
       if (isDeny) deny++; else allow++;
-      if (!incidents[it.pk]) { incidents[it.pk] = true; if (it.alarm_name) alarms++; }
+      if (!incidents[it.pk]) { incidents[it.pk] = true; if (it.alarm_name) alarms++; else if (isRedTeam(it)) attacks++; }
       if (!isDeny && it.alarm_name) {
         var start = parseIncidentStart(it.pk), end = parseSk(it.sk);
         if (start != null && end != null && end >= start) fixes.push((end - start) / 1000);
@@ -438,7 +440,7 @@
     countTo($("n-allow"), allow);
     countTo($("n-deny"), deny);
     countTo($("n-incidents"), n);
-    $("n-incidents-sub").textContent = alarms + " from alarms · " + (n - alarms) + " from humans";
+    $("n-incidents-sub").textContent = alarms + " from alarms · " + (n - alarms - attacks) + " from humans" + (attacks ? " · " + attacks + " red-team attacks" : "");
     var med = median(fixes);
     $("n-ttf").textContent = fmtSeconds(med);
     $("n-ttf-sub").textContent = med == null ? "no auto-fixed alarm yet" : "median over " + fixes.length + " auto-fixed alarm" + (fixes.length === 1 ? "" : "s") + " · no human involved";
@@ -521,7 +523,7 @@
     items.forEach(function (it) {
       if (it.pk !== lastPk) {
         lastPk = it.pk;
-        var kind = it.alarm_name ? "alarm " + esc(it.alarm_name) : "human request";
+        var kind = it.alarm_name ? "alarm " + esc(it.alarm_name) : (isRedTeam(it) ? "red-team attack" : "human request");
         html += '<tr class="incident-head"><td colspan="7">incident ' + esc(it.pk) + " · " + kind + "</td></tr>";
       }
       var deny = String(it.decision).toUpperCase() === "DENY";
@@ -586,19 +588,20 @@
       el.innerHTML = "Nothing has happened yet. Break something (<code>scripts/break-disk.sh</code>) or ask the agent to do something dangerous.";
       return;
     }
-    var fixed = {}, denies = 0, latestDeny = null;
+    var fixed = {}, denies = 0, attackDenies = 0, latestDeny = null;
     items.forEach(function (it) {
       var deny = String(it.decision).toUpperCase() === "DENY";
-      if (deny) { denies++; if (!latestDeny) latestDeny = it; }
+      if (deny) {
+        if (isRedTeam(it)) attackDenies++; else denies++;
+        if (!latestDeny) latestDeny = it;
+      }
       else if (it.alarm_name) fixed[it.pk] = true;
     });
     var nFixed = Object.keys(fixed).length, parts = [];
     if (nFixed) parts.push('<em class="ok">' + nFixed + " incident" + (nFixed === 1 ? "" : "s") + " fixed</em> with nobody awake");
-    if (denies) {
-      var d = '<em class="no">' + denies + " dangerous request" + (denies === 1 ? "" : "s") + " refused</em>";
-      if (latestDeny) d += ", the latest <code>" + esc(latestDeny.action) + "</code> stopped by <code>" + esc((latestDeny.policy_ids || [])[0] || "the leash") + "</code>";
-      parts.push(d);
-    }
+    if (denies) parts.push('<em class="no">' + denies + " dangerous request" + (denies === 1 ? "" : "s") + " refused</em>");
+    if (attackDenies) parts.push('<em class="no">' + attackDenies + " red-team attack" + (attackDenies === 1 ? "" : "s") + " stopped</em>");
+    if (latestDeny && (denies || attackDenies)) parts[parts.length - 1] += ", the latest <code>" + esc(latestDeny.action) + "</code> stopped by <code>" + esc((latestDeny.policy_ids || [])[0] || "the leash") + "</code>";
     el.innerHTML = parts.length ? parts.join(" and ") + "." : "The agent has only looked so far; nothing was changed.";
   }
 
