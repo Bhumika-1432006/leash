@@ -181,6 +181,37 @@
   #reply { margin-top: 14px; padding: 14px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); white-space: pre-wrap; font-size: 14px; min-height: 60px; line-height: 1.55; }
   #reply.err { border-color: var(--deny); color: var(--deny); }
 
+  /* the verdict: one sentence that answers "is everything okay?" before any number, and the
+     four steps a judge needs to explain the project to another judge */
+  .verdict { padding: 6px 36px 18px; }
+  .verdict-line { margin: 0 0 16px; font-size: 26px; line-height: 1.25; letter-spacing: -0.02em; font-weight: 600; max-width: 1040px; text-wrap: balance; }
+  .verdict-line em { font-style: normal; } .verdict-line em.ok { color: var(--allow); } .verdict-line em.no { color: var(--deny); }
+  .verdict-line code { font-family: var(--mono); font-size: 0.72em; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: var(--chip); vertical-align: 2px; }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
+  .steps li { position: relative; padding: 12px 14px 12px 42px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--panel); font-size: 12.5px; line-height: 1.4; }
+  .steps li::before { counter-increment: step; content: counter(step, decimal-leading-zero); position: absolute; left: 14px; top: 13px; font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .08em; }
+  .steps li b { display: block; font-weight: 600; margin-bottom: 2px; } .steps li span { color: var(--muted); }
+  @media (max-width: 800px) { .steps { grid-template-columns: repeat(2, 1fr); } .verdict-line { font-size: 20px; } }
+  @media (max-width: 600px) { .verdict { padding: 4px 16px 12px; } .steps { grid-template-columns: 1fr; } }
+
+  /* arrivals: a row that landed since the last refresh slides in and glows; every new decision
+     also announces itself in a toast, so a viewer sees the moment, not just the row */
+  @keyframes arrive { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  @keyframes glow { 0% { box-shadow: inset 4px 0 0 var(--allow); } 100% { box-shadow: inset 4px 0 0 transparent; } }
+  @keyframes glow-deny { 0% { box-shadow: inset 4px 0 0 var(--deny); } 100% { box-shadow: inset 4px 0 0 transparent; } }
+  tr.new { animation: arrive .35s ease-out 1; }
+  tr.new td:first-child { animation: glow 3s ease-out 1; }
+  tr.new.deny td:first-child { animation-name: glow-deny; }
+  .toasts { position: fixed; right: 24px; bottom: 24px; display: flex; flex-direction: column; gap: 10px; z-index: 50; width: min(440px, calc(100vw - 32px)); pointer-events: none; }
+  .toast { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--r-sm); box-shadow: var(--shadow-hover); padding: 12px 14px 12px 16px; font-size: 13px; animation: arrive .3s ease-out 1; }
+  .toast.deny { border-left-color: var(--deny); } .toast.allow { border-left-color: var(--allow); }
+  .toast .k { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; font-weight: 600; }
+  .toast.deny .k { color: var(--deny); } .toast.allow .k { color: var(--allow); }
+  .toast .m { color: var(--text-2); line-height: 1.45; }
+  .toast .m code { font-family: var(--mono); font-size: 12px; }
+  .toast.leaving { opacity: 0; transform: translateY(6px); transition: opacity .3s, transform .3s; }
+  @media (prefers-reduced-motion: reduce) { tr.new, tr.new td:first-child, .toast { animation: none; } }
+
   footer { padding: 24px 36px 36px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
   footer .label { margin: 0; }
   footer a { color: var(--muted); }
@@ -206,6 +237,17 @@
   <div class="chips"><span class="status chip" id="brain"></span><span class="status chip" id="status">connecting…</span></div>
 </header>
 <div class="banner" id="banner">dashboard/config.js not generated — run scripts/deploy.sh to write it from the stack's ApiUrl.</div>
+
+<div class="verdict">
+  <p class="verdict-line" id="verdict">Connecting to the audit trail…</p>
+  <ol class="steps" aria-label="How Leash works">
+    <li><b>An alarm fires</b><span>CloudWatch → EventBridge hands the incident to the agent</span></li>
+    <li><b>The agent diagnoses</b><span>read-only tools: tags, disk usage, running tasks</span></li>
+    <li><b>It asks the leash</b><span>every action is checked against four Cedar policies first</span></li>
+    <li><b>Act, or refuse</b><span>ALLOW runs the fix; DENY runs nothing. Both are audited.</span></li>
+  </ol>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
 <div class="stats">
   <div class="stat allow"><div class="label">Allowed</div><div class="value" id="n-allow">–</div><div class="sub">actions Cedar permitted</div></div>
@@ -372,9 +414,9 @@
       }
     });
     var n = Object.keys(incidents).length;
-    $("n-allow").textContent = allow;
-    $("n-deny").textContent = deny;
-    $("n-incidents").textContent = n;
+    countTo($("n-allow"), allow);
+    countTo($("n-deny"), deny);
+    countTo($("n-incidents"), n);
     $("n-incidents-sub").textContent = alarms + " from alarms · " + (n - alarms) + " from humans";
     var med = median(fixes);
     $("n-ttf").textContent = fmtSeconds(med);
@@ -434,6 +476,7 @@
     selectedIncident = (pk && pk !== selectedIncident) ? pk : null;
     $("tl-clear").hidden = !selectedIncident;
     $("trail-sub").textContent = selectedIncident ? "incident " + selectedIncident : "newest first · refreshes every 10 s";
+    lastSig = lastItems.length + ":" + (lastItems[0] ? lastItems[0].sk : "") + ":" + selectedIncident;
     renderTimeline(lastItems);
     render(selectedIncident ? lastItems.filter(function (it) { return it.pk === selectedIncident; }) : lastItems);
   }
@@ -461,7 +504,7 @@
         html += '<tr class="incident-head"><td colspan="7">incident ' + esc(it.pk) + " · " + kind + "</td></tr>";
       }
       var deny = String(it.decision).toUpperCase() === "DENY";
-      var cls = deny ? "deny" : "allow";
+      var cls = (deny ? "deny" : "allow") + (freshSks[it.sk] ? " new" : "");
       var resource = esc(it.resource_type) + "<br><small>" + esc(it.resource_id) + "</small>";
       // SSM output can be several hundred characters; show the tail (the before/after line) and
       // keep the whole thing on hover.
@@ -514,6 +557,83 @@
     }).catch(function () {});
   }
 
+  // --- the verdict line: answers "is everything okay?" before any number --------------------
+  function verdict(items) {
+    var el = $("verdict");
+    if (!items.length) {
+      el.innerHTML = "Nothing has happened yet. Break something (<code>scripts/break-disk.sh</code>) or ask the agent to do something dangerous.";
+      return;
+    }
+    var fixed = {}, denies = 0, latestDeny = null;
+    items.forEach(function (it) {
+      var deny = String(it.decision).toUpperCase() === "DENY";
+      if (deny) { denies++; if (!latestDeny) latestDeny = it; }
+      else if (it.alarm_name) fixed[it.pk] = true;
+    });
+    var nFixed = Object.keys(fixed).length, parts = [];
+    if (nFixed) parts.push('<em class="ok">' + nFixed + " incident" + (nFixed === 1 ? "" : "s") + " fixed</em> with nobody awake");
+    if (denies) {
+      var d = '<em class="no">' + denies + " dangerous request" + (denies === 1 ? "" : "s") + " refused</em>";
+      if (latestDeny) d += ", the latest <code>" + esc(latestDeny.action) + "</code> stopped by <code>" + esc((latestDeny.policy_ids || [])[0] || "the leash") + "</code>";
+      parts.push(d);
+    }
+    el.innerHTML = parts.length ? parts.join(" and ") + "." : "The agent has only looked so far; nothing was changed.";
+  }
+
+  // --- arrivals: rows newer than the last refresh glow; each new decision gets a toast ---------
+  var lastSeenSk = null, seenOnce = false, freshSks = {}, lastSig = null;
+  function markArrivals(items) {
+    if (!seenOnce) { seenOnce = true; lastSeenSk = items.length ? items[0].sk : null; return []; }
+    var fresh = items.filter(function (it) { return lastSeenSk == null || it.sk > lastSeenSk; });
+    if (items.length) lastSeenSk = items[0].sk;
+    return fresh;
+  }
+  function flashPolicy(name) {
+    var el = $("policy-" + name);
+    if (!el) return;
+    el.classList.add("flash");
+    setTimeout(function () { el.classList.remove("flash"); }, 1800);
+  }
+  function announce(it) {
+    var deny = String(it.decision).toUpperCase() === "DENY";
+    var box = $("toasts"), t = document.createElement("div");
+    var pol = (it.policy_ids || []).join(", ");
+    t.className = "toast " + (deny ? "deny" : "allow");
+    t.innerHTML = '<div class="k">' + (deny ? "Refused by the leash" : "Allowed, and done") + "</div>" +
+      '<div class="m"><code>' + esc(it.action) + "</code> on <code>" + esc(it.resource_id) + "</code> · env=" + esc(it.resource_env) +
+      (pol ? " · policy <code>" + esc(pol) + "</code>" : "") + "</div>";
+    box.appendChild(t);
+    while (box.children.length > 3) box.removeChild(box.firstChild);
+    if ((it.policy_ids || [])[0]) flashPolicy(it.policy_ids[0]);
+    setTimeout(function () { t.classList.add("leaving"); setTimeout(function () { if (t.parentNode) t.remove(); }, 350); }, 7000);
+  }
+
+  // --- numbers that move: count from the old value to the new one -------------------------------
+  function countTo(el, target) {
+    var to = parseInt(target, 10);
+    if (isNaN(to)) { el.textContent = target; return; }
+    var from = parseInt(el.textContent, 10);
+    if (isNaN(from) || from === to) { el.textContent = to; return; }
+    var start = performance.now(), dur = 600;
+    (function step(now) {
+      var p = Math.min(1, (now - start) / dur); p = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(from + (to - from) * p);
+      if (p < 1) requestAnimationFrame(step);
+    })(start);
+  }
+
+  // --- refresh cadence: every 10 s at rest, every 2.5 s for a while after the viewer acts ---------
+  var refreshTimer = null, fastUntil = 0;
+  function schedule() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(function () { refresh(); schedule(); }, Date.now() < fastUntil ? 2500 : 10000);
+  }
+  function hurry(ms) { fastUntil = Date.now() + (ms || 120000); schedule(); }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "/" && !/^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || "")) { e.preventDefault(); $("message").focus(); }
+  });
+
   function refresh() {
     if (!API) return;
     fetch(API + "/audit?limit=200")
@@ -521,9 +641,20 @@
       .then(function (data) {
         var items = data.items || [];
         lastItems = items;
+        var fresh = markArrivals(items);
+        freshSks = {};
+        fresh.forEach(function (it) { freshSks[it.sk] = true; });
         stats(items);
-        renderTimeline(items);
-        render(selectedIncident ? items.filter(function (it) { return it.pk === selectedIncident; }) : items);
+        verdict(items);
+        // Re-render only when the trail actually changed: a re-render replaces the rows, which
+        // would cut the arrival animation short and restart it on every fast refresh.
+        var sig = items.length + ":" + (items[0] ? items[0].sk : "") + ":" + selectedIncident;
+        if (sig !== lastSig) {
+          lastSig = sig;
+          renderTimeline(items);
+          render(selectedIncident ? items.filter(function (it) { return it.pk === selectedIncident; }) : items);
+        }
+        fresh.slice(0, 3).reverse().forEach(announce);
         $("status").textContent = "live · " + new Date().toISOString().slice(11, 19) + "Z";
       })
       .catch(function (e) { $("status").textContent = "audit fetch failed: " + e.message; });
@@ -623,7 +754,7 @@
       })
       .catch(function (e) { $("arena-status").textContent = "error: " + e.message; btn.disabled = false; });
   }
-  $("attack").addEventListener("click", attack);
+  $("attack").addEventListener("click", function () { hurry(); attack(); });
 
   // --- propose a rule (#21): draft -> validate -> prove -> (a person) approve -----------------
   Array.prototype.forEach.call(document.querySelectorAll("#rule-examples li"), function (li) {
@@ -694,7 +825,7 @@
       })
       .catch(function (e) { box.className = "proposal"; box.innerHTML = '<div class="errs">' + esc(e.message) + "</div>"; btn.disabled = false; });
   }
-  $("propose").addEventListener("click", propose);
+  $("propose").addEventListener("click", function () { hurry(); propose(); });
 
   document.addEventListener("click", function (e) {
     if (e.target.id !== "approve") return;
@@ -717,6 +848,7 @@
     var msg = $("message").value.trim();
     if (!msg || !API) return;
     var btn = $("send"), out = $("reply");
+    hurry();
     btn.disabled = true; out.className = ""; out.textContent = "Thinking… (denials take seconds; a real cleanup may exceed the 30 s API timeout - check the audit table)";
     fetch(API + "/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: msg }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
@@ -755,7 +887,7 @@
   refresh();
   loadArena();
   brainStatus();
-  setInterval(refresh, 10000);
+  schedule();
   setInterval(brainStatus, 15000);
   setInterval(loadPolicies, 30000);
   setInterval(loadArena, 5000);
