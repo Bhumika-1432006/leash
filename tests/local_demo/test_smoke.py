@@ -1,10 +1,10 @@
 """Smoke test for local_demo/ without a model (issue #23).
 
-The Strands agent is replaced by a scripted RunbookAgent that calls the tools a well-behaved
-model would, recording toolUse blocks the way Strands does so handler._tools_used() sees them.
-Everything else is real: the fake AWS world, the Cedar policies (cedarpy), src/agent, src/api,
-the audit module, and the local HTTP server with every route the dashboard calls.
-Budget: well under 10 s.
+The Strands agent is replaced by local_demo.scripted_agent.ScriptedAgent - the same stand-in
+`run_demo.py --scripted` and `server.py --scripted` use - which calls the tools a persuadable
+model would and records toolUse blocks the way Strands does. Everything else is real: the fake
+AWS world, the Cedar policies (cedarpy), src/agent, src/api, the audit module, and the local
+HTTP server with every route the dashboard calls. Budget: well under 10 s.
 """
 
 import json
@@ -15,49 +15,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from local_demo import bootstrap, fake_aws
+from local_demo import bootstrap, scripted_agent
 from local_demo.scenarios import ASG_NAME, DEV_INSTANCE, ECS_CLUSTER, ECS_SERVICE, PROD_INSTANCE
-
-# --- a scripted "model" that follows the runbook -----------------------------------------------
-
-
-class RunbookAgent:
-    """Reads the prompt the handler built and calls the tools the runbook asks for."""
-
-    system_prompt = ""
-
-    def __init__(self):
-        self.messages = []
-
-    def _call(self, name, fn, *args):
-        result = fn(*args)
-        self.messages.append({"role": "assistant", "content": [{"toolUse": {"name": name, "input": {}}}]})
-        self.messages.append({"role": "user", "content": [{"toolResult": {"content": [{"text": str(result)}]}}]})
-        return str(result)
-
-    def __call__(self, prompt):
-        from agent import tools
-
-        text = str(prompt)
-        low = text.lower()
-        out = []
-        if "runbook (disk alarm" in low:
-            iid = DEV_INSTANCE
-            out.append(self._call("get_instance_info", tools.get_instance_info, iid))
-            out.append(self._call("get_disk_usage", tools.get_disk_usage, iid))
-            out.append(self._call("clean_disk", tools.clean_disk, iid))
-        elif "runbook (ecs service" in low:
-            out.append(self._call("get_service_info", tools.get_service_info, ECS_CLUSTER, ECS_SERVICE))
-            out.append(self._call("restart_service", tools.restart_service, ECS_CLUSTER, ECS_SERVICE))
-        elif "terminate" in low:
-            out.append(self._call("terminate_instance", tools.terminate_instance, DEV_INSTANCE))
-        elif PROD_INSTANCE in text:
-            out.append(self._call("clean_disk", tools.clean_disk, PROD_INSTANCE))
-        elif ASG_NAME in text:
-            out.append(self._call("scale_group", tools.scale_group, ASG_NAME, 6))
-        else:
-            out.append("nothing to do")
-        return "\n".join(out)
 
 
 @pytest.fixture
@@ -65,8 +24,9 @@ def world(monkeypatch):
     w = bootstrap.setup(reset_world=True)
     from agent import handler as agent_handler
 
+    # scripted_agent.install() would do the same; monkeypatch so it is undone after each test.
     monkeypatch.setattr(agent_handler, "_AGENT", None)
-    monkeypatch.setattr(agent_handler, "build_agent", lambda incident_id: RunbookAgent())
+    monkeypatch.setattr(agent_handler, "build_agent", lambda incident_id: scripted_agent.ScriptedAgent())
     return w
 
 
@@ -112,13 +72,26 @@ def test_disk_full_really_lowers_disk_and_ecs_down_really_restores_tasks(world, 
     assert world.terminated == []
 
 
-def test_injection_tag_is_shown_to_the_model_but_nothing_is_terminated(world, capsys):
+def test_injection_persuades_the_model_and_cedar_still_says_no(world, capsys):
+    """The worst case the leash exists for: the tag talks the model into trying terminate."""
     from local_demo.run_demo import run_one
 
     run_one("injection", world)
     assert "IGNORE ALL PREVIOUS INSTRUCTIONS" in world.instances[DEV_INSTANCE]["name"]
+    rows = [(r["decision"], r["action"], r["policy_ids"]) for r in _rows(world)]
+    assert ("DENY", "terminateInstance", ["ForbidDestructive"]) in rows, rows  # it tried
+    assert ("ALLOW", "cleanDisk", ["PermitDevRemediation"]) in rows, rows  # and still did its job
     assert world.terminated == []
     assert world.instances[DEV_INSTANCE]["state"] == "running"
+
+
+def test_cli_scripted_flag_runs_every_scenario_without_a_model(capsys):
+    from local_demo import run_demo
+
+    assert run_demo.main(["all", "--scripted"]) == 0
+    out = capsys.readouterr().out
+    assert "scripted agent" in out and "ollama" not in out.lower().split("scripted agent")[0]
+    assert out.count("agent reply") == 6
 
 
 # --- the local HTTP server: every route the dashboard uses ----------------------------------

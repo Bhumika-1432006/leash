@@ -6,6 +6,7 @@ Usage (from the repo root):
     python local_demo/run_demo.py disk-full
     python local_demo/run_demo.py all
     python local_demo/run_demo.py disk-full ecs-down ask-terminate
+    python local_demo/run_demo.py all --scripted     # no model: a scripted agent plays its part
 
 What actually runs for real, not mocked: the Strands agent (on a local Ollama model), the real
 Cedar policies (evaluated by cedarpy against cedar/policies/*.cedar + cedar/schema.json), and
@@ -36,8 +37,12 @@ def run_one(key: str, world) -> None:
     scenario.setup(world)
 
     before_n = len(world.audit_items)
+    from agent import handler as handler_mod
     from agent.handler import handler
 
+    # Each scenario is a distinct incident by construction, so the duplicate-alarm cooldown
+    # (one remediation per alarm transition) must not make scenario 6 skip scenario 1's alarm.
+    handler_mod._RECENT.clear()
     print(f"-> sending event: {json.dumps(scenario.event)[:160]}...")
     result = handler(scenario.event, None)
     print(f"\nagent reply (incident {result['incident_id']}):\n")
@@ -73,15 +78,25 @@ def main(argv: list[str]) -> int:
             print(f"  {s.key:20s} {s.title}")
         return 0
 
-    ready, msg = bootstrap.ollama_ready()
-    print(("[ok] " if ready else "[!!] ") + msg)
-    if not ready:
-        print("      Start it with: ollama serve   (in another terminal), and make sure the "
-              "model is pulled: ollama pull llama3.1:8b")
-        print("      Continuing anyway - a failed agent call is caught and reported as text, "
-              "it will not crash this script.")
+    scripted = "--scripted" in argv
+    argv = [a for a in argv if a != "--scripted"]
+
+    if scripted:
+        print("[ok] scripted agent: no model, no Ollama - a scripted stand-in plays the model's part")
+    else:
+        ready, msg = bootstrap.ollama_ready()
+        print(("[ok] " if ready else "[!!] ") + msg)
+        if not ready:
+            print("      Start it with: ollama serve   (in another terminal), and make sure the "
+                  "model is pulled: ollama pull llama3.2:3b - or add --scripted to run with no model.")
+            print("      Continuing anyway - a failed agent call is caught and reported as text, "
+                  "it will not crash this script.")
 
     world = bootstrap.setup(reset_world=True)
+    if scripted:
+        from local_demo import scripted_agent
+
+        scripted_agent.install()
 
     from local_demo.scenarios import BY_KEY
 
