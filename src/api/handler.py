@@ -101,6 +101,11 @@ def _health(event: dict) -> dict:
             brain.update(online=age < HEARTBEAT_STALE_S, seen=hb["at"], age_s=int(age),
                          model=hb.get("model", ""), host=hb.get("host", ""))
         body["brain"] = brain
+    elif os.environ.get("LEASH_LOCAL_MODEL") == "1":
+        # local_demo: the agent runs in this process on a local model (or the scripted stand-in).
+        body["brain"] = {"mode": "local", "online": True,
+                         "model": "scripted" if os.environ.get("LEASH_SCRIPTED_AGENT") == "1"
+                         else os.environ.get("OLLAMA_MODEL_ID", "local model")}
     else:
         body["brain"] = {"mode": "bedrock", "online": True}
     return _response(200, body)

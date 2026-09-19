@@ -194,7 +194,13 @@ def _policy_files() -> tuple[dict, str]:
     # new file next to the four canonical ones and must be enforced without a code change.
     files = {path.stem: path.read_text(encoding="utf-8") for path in sorted((base / "policies").glob("*.cedar"))}
     files["schema"] = (base / "schema.json").read_text(encoding="utf-8")
-    return files, f"disk:{base}"
+    # Same role as the S3 ETag version: identifies the policy set in force and changes the
+    # moment any policy text changes. A content hash, not a path, so it is stable and
+    # does not leak the machine's directory layout onto the dashboard.
+    import hashlib
+
+    digest = hashlib.sha256("".join(files[k] for k in sorted(files)).encode("utf-8")).hexdigest()[:8]
+    return files, f"disk:{digest}"
 
 
 def _policy_files_s3(bucket: str) -> tuple[dict, str]:

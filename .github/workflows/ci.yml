@@ -21,7 +21,17 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Unit tests (real Cedar evaluation via cedarpy, every boto3 client faked)
-        run: python -m pytest -q
+        run: python -m pytest -q --ignore=tests/local_demo
+        env:
+          PYTHONPATH: src
+
+      - name: Local demo smoke test (scripted agent, no model, all routes; budget 10 s)
+        run: python -m pytest -q tests/local_demo --durations=5
+        env:
+          PYTHONPATH: src
+
+      - name: Local demo CLI end to end (no model)
+        run: python local_demo/run_demo.py all --scripted | grep -E '^  \[(ALLOW|DENY)' | tee /dev/stderr | grep -c . | xargs test 7 -eq
         env:
           PYTHONPATH: src
 
