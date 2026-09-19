@@ -113,7 +113,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
-        elif parsed.path in ("/health", "/audit", "/policies", "/redteam"):
+        elif parsed.path in ("/health", "/audit", "/policies", "/redteam", "/reply", "/policies/proposals"):
             query = parse_qs(parsed.query)
             self._send_api(_api_event("GET", parsed.path, query, None))
         else:
@@ -124,7 +124,7 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         length = int(self.headers.get("Content-Length", 0) or 0)
         body = self.rfile.read(length) if length else b""
-        if parsed.path == "/ask":
+        if parsed.path in ("/ask", "/policies/propose", "/policies/approve"):
             self._send_api(_api_event("POST", parsed.path, {}, body))
         elif parsed.path == "/redteam":
             self._start_redteam(body)

@@ -41,8 +41,8 @@ Incident id: {incident_id}
 """
 
 
-def build_agent(incident_id: str) -> Agent:
-    """Return a fresh Strands Agent for this incident."""
+def build_model():
+    """The configured model: Ollama when LEASH_LOCAL_MODEL=1, else Bedrock."""
     if os.environ.get("LEASH_LOCAL_MODEL") == "1":
         # Verified against the installed strands-agents 1.56.0 source:
         # OllamaModel(host, *, ollama_client_args=None, **OllamaConfig) where OllamaConfig has
@@ -62,6 +62,26 @@ def build_agent(incident_id: str) -> Agent:
             region_name=os.environ.get("AWS_REGION", "us-east-1"),
             max_tokens=2048,
         )
+    return model
+
+
+def build_agent(incident_id: str) -> Agent:
+    """Return a fresh Strands Agent for this incident."""
+    model = build_model()
     prompt = SYSTEM_PROMPT.format(incident_id=incident_id, scale_cap=os.environ.get("SCALE_CAP", "4"))
     # callback_handler=None disables the streaming stdout printer; the handler logs the final text.
     return Agent(model=model, tools=tools.ALL_TOOLS, system_prompt=prompt, callback_handler=None)
+
+
+def draft_text(prompt: str) -> str:
+    """One model call, no tools: used to draft a Cedar policy from English (#21). None of the
+    leash runs here - whatever comes back is validated by Cedar before anyone sees it."""
+    agent = Agent(model=build_model(), tools=[], callback_handler=None)
+    return str(agent(prompt)).strip()
+
+
+def drafter_or_none():
+    """The model drafter when a model is configured; None under the scripted stand-in."""
+    if os.environ.get("LEASH_SCRIPTED_AGENT") == "1":
+        return None
+    return draft_text
