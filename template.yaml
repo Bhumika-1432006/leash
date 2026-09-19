@@ -610,6 +610,9 @@ Resources:
           POLICY_STORE_ID: !If [UseAvp, !GetAtt Authz.Outputs.PolicyStoreId, !Ref "AWS::NoValue"]
           POLICY_ID_MAP: !If [UseAvp, !GetAtt Authz.Outputs.PolicyIdMap, !Ref "AWS::NoValue"]
           LEASH_AUTHZ_FUNCTION: !If [UseS3Policies, !Ref AuthzFunction, !Ref "AWS::NoValue"]
+          # #21: approving a proposed policy writes it to the policy bucket. This is the API
+          # function's only write, and the only code path that publishes a policy.
+          LEASH_CEDAR_S3_BUCKET: !If [UseS3Policies, !Ref PolicyBucket, !Ref "AWS::NoValue"]
       Events:
         Health:
           Type: HttpApi
@@ -653,6 +656,24 @@ Resources:
             ApiId: !Ref LeashApi
             Path: /reply
             Method: GET
+        ProposePolicy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LeashApi
+            Path: /policies/propose
+            Method: POST
+        ListProposals:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LeashApi
+            Path: /policies/proposals
+            Method: GET
+        ApprovePolicy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref LeashApi
+            Path: /policies/approve
+            Method: POST
       Policies:
         - Version: "2012-10-17"
           Statement:
@@ -662,6 +683,10 @@ Resources:
               Resource:
                 - !GetAtt AuditTable.Arn
                 - !Sub "${AuditTable.Arn}/index/*"
+            - Sid: WriteProposals
+              Effect: Allow
+              Action: dynamodb:PutItem
+              Resource: !GetAtt AuditTable.Arn
             - !If
               - UseBedrock
               - Sid: AskAgent
@@ -693,6 +718,20 @@ Resources:
                 Effect: Allow
                 Action: lambda:InvokeFunction
                 Resource: !GetAtt AuthzFunction.Arn
+              - !Ref "AWS::NoValue"
+            - !If
+              - UseS3Policies
+              - Sid: PublishApprovedPolicy
+                Effect: Allow
+                Action: [s3:PutObject, s3:GetObject]
+                Resource: !Sub "${PolicyBucket.Arn}/cedar/*"
+              - !Ref "AWS::NoValue"
+            - !If
+              - UseS3Policies
+              - Sid: ListPolicyBucket
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt PolicyBucket.Arn
               - !Ref "AWS::NoValue"
 
   # -------------------------------------------------------------------------
