@@ -10,8 +10,9 @@
 <style>
   /* Leash dashboard. Editorial, paper-first: warm off-white ground, tight display type, tiny
      mono uppercase labels, generously rounded cards with soft shadows, one black pill button.
-     One set of tokens; the dark scheme only swaps values, so both schemes share one layout and
-     one meaning per colour. Every class/id here is the one the script uses. */
+     Light only, by decision: the page looks the same on every viewer's machine, the video and
+     the README screenshots match it, and the colours were tuned for this ground. Every value is
+     a token, so a dark scheme is one media block away if ever wanted. */
   :root {
     color-scheme: light;
     --bg: #f6f6f3; --panel: #ffffff; --panel-2: #fafaf8; --line: #e6e5df; --line-2: #d6d5ce;
@@ -27,21 +28,6 @@
     --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
     --r: 16px; --r-sm: 10px;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --bg: #0f1012; --panel: #17181b; --panel-2: #1c1d21; --line: #26272c; --line-2: #33343a;
-      --text: #ededea; --text-2: #c9c9c3; --muted: #9a9a93;
-      --allow: #3ddc84; --deny: #ff6b62; --accent: #7aa2ff; --warn: #ffb454;
-      --chip: #24252a; --btn-bg: #f4f4f1; --btn-fg: #111111;
-      --deny-wash: rgba(255, 107, 98, 0.06); --accent-wash: rgba(122, 162, 255, 0.07);
-      --allow-tint: rgba(61, 220, 132, 0.14); --deny-tint: rgba(255, 107, 98, 0.14); --warn-tint: rgba(255, 180, 84, 0.14);
-      --accent-ring: rgba(122, 162, 255, 0.35);
-      --banner-bg: #3a2a12; --banner-line: #a8752a; --banner-fg: #ffd9a8;
-      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
-      --shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 16px 32px -16px rgba(0, 0, 0, 0.7);
-    }
   }
 
   * { box-sizing: border-box; }
@@ -78,9 +64,9 @@
   .stat .sub { color: var(--muted); font-size: 12.5px; margin-top: 8px; line-height: 1.4; }
   .stat.allow .value { color: var(--allow); } .stat.deny .value { color: var(--deny); } .stat.time .value { color: var(--accent); }
 
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 20px; padding: 20px 36px 8px; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 20px 36px 8px; }
   @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
-  .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .wide { grid-column: 1 / -1; }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 22px 24px; box-shadow: var(--shadow); min-width: 0; }
   section h2 { margin: 0 0 14px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
   section h2 small { text-transform: none; letter-spacing: 0; font-family: var(--sans); font-size: 13px; font-weight: 400; color: var(--muted); }
@@ -101,9 +87,9 @@
   th { font-weight: 500; white-space: nowrap; }
   thead th { position: sticky; top: 0; background: var(--panel); }
   tbody tr:last-child td { border-bottom: 0; }
-  td.result { font-size: 12.5px; color: var(--text-2); min-width: 240px; max-width: 420px; overflow-wrap: break-word; line-height: 1.45; }
+  td.result { font-size: 12.5px; color: var(--text-2); max-width: 560px; overflow-wrap: anywhere; line-height: 1.45; }
   td.mono { font-family: var(--mono); font-size: 12.5px; }
-  td.mono small { color: var(--muted); font-size: 11.5px; }
+  td.mono small { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
   td.time { white-space: nowrap; color: var(--muted); font-family: var(--mono); font-size: 12px; }
   tr.deny td { background: var(--deny-wash); }
   tr.incident-head td { background: var(--panel-2); color: var(--muted); font-size: 11px; font-family: var(--mono); letter-spacing: 0.06em; padding: 6px 10px; border-bottom: 1px solid var(--line); }
@@ -251,53 +237,49 @@
       <div class="feed" id="rt-feed"></div>
     </div>
   </section>
-  <div class="col">
-    <section>
-      <h2>Incidents <small>one row each · click to filter the trail</small></h2>
-      <div class="scroll"><div class="timeline" id="timeline"><div class="empty">No incidents yet.</div></div></div>
-      <p class="tl-hint"><span><i class="dot allow"></i>allowed</span><span><i class="dot deny"></i>denied</span><span>bar: incident start → last decision</span><a href="#" id="tl-clear" hidden>show all incidents</a></p>
-    </section>
-    <section>
-      <h2>Audit trail <small id="trail-sub">newest first · refreshes every 10 s</small></h2>
-      <div class="scroll">
-      <table>
-        <thead><tr><th>Time (UTC)</th><th>Action</th><th>Resource</th><th>Env</th><th>Decision</th><th>Policies</th><th>Result</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-      </table>
-      </div>
-    </section>
-  </div>
-  <div class="col">
-    <section>
-      <h2>The leash <small id="leash-src">read live from the policy store</small> <small id="policy-version" class="mono" title="identifies the policy set in force (S3 object ETags); changes the moment a policy is edited in the bucket"></small></h2>
-      <div id="policies"><div class="empty">Loading policies…</div></div>
-      <p class="note">Cedar is deny-by-default and any <b>forbid</b> beats every <b>permit</b>. Click a policy id in the audit trail to jump to the rule that decided it.</p>
-    </section>
-    <section>
-      <h2>Propose a rule <small>English in, Cedar out, proven before it is published</small></h2>
-      <textarea id="rule" placeholder="e.g. the bot may never scale above 2"></textarea>
-      <button id="propose">Draft &amp; prove</button>
-      <ul class="examples" id="rule-examples">
-        <li>the bot may never scale above 2</li>
-        <li>allow cleanup on staging</li>
-        <li>the bot must not restart anything on prod</li>
-      </ul>
-      <p class="note">The model drafts, Cedar decides whether the draft is even valid, and the proof shows every
-        request whose answer would change. Nothing is published until a person clicks Approve.</p>
-      <div id="proposal" class="proposal" hidden></div>
-    </section>
-    <section>
-      <h2>Ask the agent</h2>
-      <textarea id="message" placeholder="Ask the agent to do something"></textarea>
-      <button id="send">Send to agent</button>
-      <!-- filled by script from LEASH_CONFIG so the prompts carry the deployment's real ids -->
-      <ul class="examples" id="examples"></ul>
-      <p class="note">Every decision lands in the audit trail the moment the leash makes it, before the agent
-        acts. The reply itself takes as long as the model does: seconds on Bedrock, a few minutes on a
-        laptop CPU model.</p>
-      <div id="reply">The agent will diagnose, act only through policy-checked tools, and report what was allowed or denied.</div>
-    </section>
-  </div>
+  <section>
+    <h2>Incidents <small>one row each · click to filter the trail</small></h2>
+    <div class="scroll"><div class="timeline" id="timeline"><div class="empty">No incidents yet.</div></div></div>
+    <p class="tl-hint"><span><i class="dot allow"></i>allowed</span><span><i class="dot deny"></i>denied</span><span>bar: incident start → last decision</span><a href="#" id="tl-clear" hidden>show all incidents</a></p>
+  </section>
+  <section>
+    <h2>The leash <small id="leash-src">read live from the policy store</small> <small id="policy-version" class="mono" title="identifies the policy set in force (S3 object ETags); changes the moment a policy is edited in the bucket"></small></h2>
+    <div id="policies"><div class="empty">Loading policies…</div></div>
+    <p class="note">Cedar is deny-by-default and any <b>forbid</b> beats every <b>permit</b>. Click a policy id in the audit trail to jump to the rule that decided it.</p>
+  </section>
+  <section class="wide">
+    <h2>Audit trail <small id="trail-sub">newest first · refreshes every 10 s</small></h2>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Time (UTC)</th><th>Action</th><th>Resource</th><th>Env</th><th>Decision</th><th>Policies</th><th>Result</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table>
+    </div>
+  </section>
+  <section>
+    <h2>Propose a rule <small>English in, Cedar out, proven before it is published</small></h2>
+    <textarea id="rule" placeholder="e.g. the bot may never scale above 2"></textarea>
+    <button id="propose">Draft &amp; prove</button>
+    <ul class="examples" id="rule-examples">
+      <li>the bot may never scale above 2</li>
+      <li>allow cleanup on staging</li>
+      <li>the bot must not restart anything on prod</li>
+    </ul>
+    <p class="note">The model drafts, Cedar decides whether the draft is even valid, and the proof shows every
+      request whose answer would change. Nothing is published until a person clicks Approve.</p>
+    <div id="proposal" class="proposal" hidden></div>
+  </section>
+  <section>
+    <h2>Ask the agent</h2>
+    <textarea id="message" placeholder="Ask the agent to do something"></textarea>
+    <button id="send">Send to agent</button>
+    <!-- filled by script from LEASH_CONFIG so the prompts carry the deployment's real ids -->
+    <ul class="examples" id="examples"></ul>
+    <p class="note">Every decision lands in the audit trail the moment the leash makes it, before the agent
+      acts. The reply itself takes as long as the model does: seconds on Bedrock, a few minutes on a
+      laptop CPU model.</p>
+    <div id="reply">The agent will diagnose, act only through policy-checked tools, and report what was allowed or denied.</div>
+  </section>
 </main>
 <footer>
   <p class="label">Built on AWS · Strands · Cedar</p>
